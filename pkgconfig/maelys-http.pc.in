@@ -1,0 +1,9 @@
+prefix=@PREFIX@
+includedir=${prefix}/include
+libdir=${prefix}/lib
+
+Name: maelys-http
+Description: Bounded HTTP/1.1 codec
+Version: @VERSION@
+Libs: -L${libdir} -lmaelys_http
+Cflags: -I${includedir}

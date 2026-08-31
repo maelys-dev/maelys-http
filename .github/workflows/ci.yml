@@ -1,0 +1,100 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            cc: gcc
+            cxx: g++
+          - runner: ubuntu-24.04
+            cc: clang
+            cxx: clang++
+          - runner: ubuntu-24.04-arm
+            cc: gcc
+            cxx: g++
+          - runner: ubuntu-24.04-arm
+            cc: clang
+            cxx: clang++
+          - runner: macos-15
+            cc: clang
+            cxx: clang++
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: maelys-http
+      - uses: actions/checkout@v4
+        with:
+          repository: maelys-dev/maelys-system
+          ref: c1fa1d4ebf1a33f084239d55af565150d5e51e13
+          path: maelys-system
+      - name: Build dependency
+        run: make -C maelys-system CC=${{ matrix.cc }} CXX=${{ matrix.cxx }}
+      - name: Build and test
+        run: make -C maelys-http clean check install-check check-system-pin CC=${{ matrix.cc }} CXX=${{ matrix.cxx }} SYSTEM_DIR=../maelys-system
+      - name: Architecture
+        run: uname -m
+
+  sanitizers:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: maelys-http
+      - uses: actions/checkout@v4
+        with:
+          repository: maelys-dev/maelys-system
+          ref: c1fa1d4ebf1a33f084239d55af565150d5e51e13
+          path: maelys-system
+      - run: make -C maelys-system CC=clang
+      - run: make -C maelys-http sanitizers CC=clang SYSTEM_DIR=../maelys-system
+      - run: make -C maelys-http fuzz-libfuzzer CC=clang SYSTEM_DIR=../maelys-system
+
+  thread-sanitizer:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: maelys-http
+      - uses: actions/checkout@v4
+        with:
+          repository: maelys-dev/maelys-system
+          ref: c1fa1d4ebf1a33f084239d55af565150d5e51e13
+          path: maelys-system
+      - run: make -C maelys-system CC=clang
+      - name: Exercise client and concurrent POSIX DNS ownership under TSan
+        run: make -C maelys-http tsan CC=clang SYSTEM_DIR=../maelys-system
+
+  mbedtls:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, macos-15]
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: maelys-http
+      - uses: actions/checkout@v4
+        with:
+          repository: maelys-dev/maelys-system
+          ref: c1fa1d4ebf1a33f084239d55af565150d5e51e13
+          path: maelys-system
+      - name: Install Mbed TLS (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libmbedtls-dev
+      - name: Install Mbed TLS (macOS)
+        if: runner.os == 'macOS'
+        run: brew install mbedtls
+      - run: make -C maelys-system
+      - run: make -C maelys-http clean tls-integration REQUIRE_MBEDTLS=1 SYSTEM_DIR=../maelys-system

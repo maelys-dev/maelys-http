@@ -1,0 +1,11 @@
+prefix=@PREFIX@
+includedir=${prefix}/include
+libdir=${prefix}/lib
+
+Name: maelys-http-tls-mbedtls
+Description: Optional Mbed TLS client provider for Maelys HTTP
+Version: @VERSION@
+Requires.private: mbedtls mbedx509 mbedcrypto
+Libs: -L${libdir} -lmaelys_http_tls_mbedtls -lmaelys_http
+Libs.private: -pthread
+Cflags: -I${includedir}

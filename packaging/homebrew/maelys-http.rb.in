@@ -1,0 +1,39 @@
+class MaelysHttp < Formula
+  desc "Bounded HTTP/1.1 codec and streaming client"
+  homepage "https://github.com/maelys-dev/maelys-http"
+  url "https://github.com/maelys-dev/maelys-http/archive/refs/tags/v@VERSION@.tar.gz"
+  sha256 "@SHA256@"
+  license "Apache-2.0"
+
+  depends_on "maelys-system"
+  depends_on "mbedtls" => :optional
+
+  def install
+    system_lib = Formula["maelys-system"].opt_lib/"libmaelys_sys.a"
+    system "make", "all", "SYSTEM_DIR=#{Formula["maelys-system"].opt_prefix}",
+           "SYSTEM_LIB=#{system_lib}"
+    system "make", "install", "PREFIX=#{prefix}",
+           "SYSTEM_DIR=#{Formula["maelys-system"].opt_prefix}",
+           "SYSTEM_LIB=#{system_lib}"
+    system "make", "install-mbedtls", "PREFIX=#{prefix}",
+           "SYSTEM_DIR=#{Formula["maelys-system"].opt_prefix}",
+           "SYSTEM_LIB=#{system_lib}" if build.with? "mbedtls"
+  end
+
+  test do
+    (testpath/"test.c").write <<~EOS
+      #include <maelys/http.h>
+      #include <maelys/http_client.h>
+      int main(void) {
+        maelys_http_client_limits_t limits;
+        maelys_http_client_limits_default(&limits);
+        return MAELYS_HTTP_ABI_VERSION != 1u || limits.io_buffer_bytes == 0;
+      }
+    EOS
+    system ENV.cc, "-std=c11", "-I#{include}", testpath/"test.c",
+           "-L#{lib}", "-lmaelys_http_client", "-lmaelys_http",
+           Formula["maelys-system"].opt_lib/"libmaelys_sys.a", "-pthread",
+           "-o", testpath/"test"
+    system testpath/"test"
+  end
+end

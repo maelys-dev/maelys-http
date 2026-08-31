@@ -1,0 +1,14 @@
+Maelys HTTP
+Copyright 2026 Maelys Developers
+
+Architectural provenance and retained MIT notices:
+
+Maelys MCP HTTP parser and corpus
+Copyright (c) 2026 David Bromberg
+MIT License
+
+Maelys Egress HTTP and TLS implementations
+Copyright (c) 2026 Maelys Developers
+MIT License
+
+See docs/provenance.md for exact repositories, commits and extracted ideas.
