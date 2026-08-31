@@ -30,10 +30,10 @@ jobs:
             cxx: clang++
     runs-on: ${{ matrix.runner }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           path: maelys-http
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           repository: maelys-dev/maelys-system
           ref: c1fa1d4ebf1a33f084239d55af565150d5e51e13
@@ -48,10 +48,10 @@ jobs:
   sanitizers:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           path: maelys-http
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           repository: maelys-dev/maelys-system
           ref: c1fa1d4ebf1a33f084239d55af565150d5e51e13
@@ -63,10 +63,10 @@ jobs:
   thread-sanitizer:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           path: maelys-http
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           repository: maelys-dev/maelys-system
           ref: c1fa1d4ebf1a33f084239d55af565150d5e51e13
@@ -82,10 +82,10 @@ jobs:
         runner: [ubuntu-24.04, macos-15]
     runs-on: ${{ matrix.runner }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           path: maelys-http
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           repository: maelys-dev/maelys-system
           ref: c1fa1d4ebf1a33f084239d55af565150d5e51e13

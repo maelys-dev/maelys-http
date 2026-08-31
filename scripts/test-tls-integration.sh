@@ -21,21 +21,27 @@ openssl req -x509 -newkey rsa:2048 -nodes -days 1 \
     -subj /CN=other -addext subjectAltName=DNS:other \
     -keyout "$root/other.key" -out "$root/other.crt" >/dev/null 2>&1
 
-python3 tests/https_server.py 0 "$root/server.crt" "$root/server.key" "$ready" &
+python3 tests/https_server.py 0 "$root/server.crt" "$root/server.key" "$ready" \
+    >"$root/server.log" 2>&1 &
 server_pid=$!
 i=0
-while [ "$i" -lt 50 ]; do
+while [ "$i" -lt 300 ]; do
     if [ -s "$ready" ]; then
         break
     fi
     if ! kill -0 "$server_pid" 2>/dev/null; then
+        cat "$root/server.log" >&2
         echo 'TLS integration server exited before readiness' >&2
         exit 1
     fi
     i=$((i + 1))
     sleep .1
 done
-test "$i" -lt 50
+if [ "$i" -ge 300 ]; then
+    cat "$root/server.log" >&2
+    echo 'TLS integration server readiness timed out' >&2
+    exit 1
+fi
 port="$(sed -n '1p' "$ready")"
 case "$port" in
     ''|*[!0-9]*) echo 'invalid TLS integration port' >&2; exit 1 ;;
