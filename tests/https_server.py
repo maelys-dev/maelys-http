@@ -22,4 +22,7 @@ server = http.server.ThreadingHTTPServer(("127.0.0.1", port), Handler)
 context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
 context.load_cert_chain(sys.argv[2], sys.argv[3])
 server.socket = context.wrap_socket(server.socket, server_side=True)
+if len(sys.argv) == 5:
+    with open(sys.argv[4], "w", encoding="ascii") as ready:
+        ready.write(f"{server.server_address[1]}\n")
 server.serve_forever()
