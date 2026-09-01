@@ -1,7 +1,7 @@
 class MaelysHttp < Formula
   desc "Bounded HTTP/1.1 codec and streaming client"
   homepage "https://github.com/maelys-dev/maelys-http"
-  url "https://github.com/maelys-dev/maelys-http/archive/refs/tags/v@VERSION@.tar.gz"
+  url "https://github.com/maelys-dev/maelys-http/releases/download/v@VERSION@/maelys-http-@VERSION@.tar.gz"
   sha256 "@SHA256@"
   license "Apache-2.0"
 

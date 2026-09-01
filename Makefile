@@ -1,6 +1,6 @@
 SHELL := /bin/sh
 
-VERSION := 0.1.0-dev
+VERSION := $(shell sed -n '1p' VERSION)
 ABI_VERSION := 1
 CC ?= cc
 CXX ?= c++
@@ -30,9 +30,9 @@ TEST_BINS := $(BUILD)/test_parser $(BUILD)/test_conformance $(BUILD)/test_messag
 	$(BUILD)/test_transport_posix $(BUILD)/test_resolver_internal \
 	$(BUILD)/test_tls_provider $(BUILD)/header_cpp
 
-.PHONY: all clean check test sanitizers tsan fuzzers fuzz-libfuzzer install uninstall \
-	check-system-pin install-check package check-mbedtls tls-integration \
-	install-mbedtls
+.PHONY: all clean check check-version test sanitizers tsan fuzzers \
+	fuzz-libfuzzer install uninstall check-system-pin install-check package \
+	package-homebrew check-mbedtls tls-integration install-mbedtls
 
 all: $(BUILD)/libmaelys_http.a $(BUILD)/libmaelys_http_client.a
 
@@ -105,7 +105,13 @@ test: $(TEST_BINS)
 	$(BUILD)/test_tls_provider
 	$(BUILD)/header_cpp
 
-check: test fuzzers
+check-version:
+	@test "$(VERSION)" = "$$(sed -n 's/^#define MAELYS_HTTP_VERSION_MAJOR \([0-9][0-9]*\)u/\1/p' include/maelys/http.h).$$(sed -n 's/^#define MAELYS_HTTP_VERSION_MINOR \([0-9][0-9]*\)u/\1/p' include/maelys/http.h).$$(sed -n 's/^#define MAELYS_HTTP_VERSION_PATCH \([0-9][0-9]*\)u/\1/p' include/maelys/http.h)" || \
+		{ echo 'VERSION and public header disagree' >&2; exit 1; }
+	@grep -Fq "## $(VERSION) - " CHANGELOG.md || \
+		{ echo 'CHANGELOG has no entry for $(VERSION)' >&2; exit 1; }
+
+check: check-version test fuzzers
 	./scripts/audit-boundaries.sh
 	./scripts/audit-symbols.sh
 	./scripts/audit-whitespace.sh
@@ -280,6 +286,9 @@ install-check: all
 
 package: check
 	./scripts/package-release.sh $(VERSION)
+
+package-homebrew:
+	./scripts/render-homebrew-formula.sh
 
 clean:
 	rm -rf $(BUILD) dist

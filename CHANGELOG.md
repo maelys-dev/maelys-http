@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.0 - 2026-09-01
 
 ### Added
 
@@ -29,4 +29,5 @@
   `Connection: close` and an otherwise silent peer shutdown. Run the adversarial
   response corpus under ASan/UBSan in addition to the ordinary check suite.
 
-This development entry is not a release or compatibility promise.
+This release establishes public ABI 1 for the codec, client, transport and TLS
+provider seams.

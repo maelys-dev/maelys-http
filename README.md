@@ -23,10 +23,11 @@ The package deliberately ships separate static archives:
 
 ## Status
 
-The repository is pre-release. H1 (codec) and H2 (generic client) are project
-milestones, not an HTTP/2 support claim. Only HTTP/1.1 is accepted. A future
-TLS provider that negotiates `h2` must fail unless an explicit caller policy
-and an HTTP/2 engine exist; this release neither advertises nor accepts `h2`.
+Version 0.1.0 establishes public ABI 1 for the H1 codec and H2 generic client
+milestones; those milestone names are not an HTTP/2 support claim. Only
+HTTP/1.1 is accepted. A future TLS provider that negotiates `h2` must fail
+unless an explicit caller policy and an HTTP/2 engine exist; this release
+neither advertises nor accepts `h2`.
 
 ## Build
 
