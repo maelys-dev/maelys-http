@@ -141,6 +141,13 @@ sanitizers: $(SYSTEM_LIB)
 		ASAN_OPTIONS=detect_leaks=$$leaks $(BUILD)/san/test_parser
 	$(CC) $(CPPFLAGS) -std=c11 -D_POSIX_C_SOURCE=200809L -O1 -g \
 		-fno-omit-frame-pointer -fsanitize=address,undefined \
+		src/common.c src/parser.c src/message.c tests/test_conformance.c \
+		-o $(BUILD)/san/test_conformance
+	@if [ "$$(uname -s)" = Darwin ]; then leaks=0; else leaks=1; fi; \
+		ASAN_OPTIONS=detect_leaks=$$leaks $(BUILD)/san/test_conformance \
+			conformance/response-wire-cases.txt
+	$(CC) $(CPPFLAGS) -std=c11 -D_POSIX_C_SOURCE=200809L -O1 -g \
+		-fno-omit-frame-pointer -fsanitize=address,undefined \
 		src/common.c src/parser.c src/message.c tests/test_message.c \
 		-o $(BUILD)/san/test_message
 	@if [ "$$(uname -s)" = Darwin ]; then leaks=0; else leaks=1; fi; \

@@ -24,5 +24,9 @@
   `idle_connection_ttl_ms` (30000) client limits, and destroyed on every
   completion path that is not fully framed and quiet. The default still sends
   `Connection: close` on every request.
+- Exercise connection reuse over the real POSIX transport and Mbed TLS, proving
+  two requests on one TLS connection and fresh dialing after both an explicit
+  `Connection: close` and an otherwise silent peer shutdown. Run the adversarial
+  response corpus under ASan/UBSan in addition to the ordinary check suite.
 
 This development entry is not a release or compatibility promise.

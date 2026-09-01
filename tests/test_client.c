@@ -1048,6 +1048,33 @@ static int test_reuse_disabled_by_default_sends_close(void) {
     return 0;
 }
 
+static int test_reuse_limit_validation(void) {
+    ka_context_t context;
+    maelys_http_client_limits_t limits;
+    maelys_http_transport_t *transport;
+    maelys_http_client_t *client = NULL;
+    memset(&context, 0, sizeof(context));
+    transport = make_ka_transport(&context);
+    CHECK(transport != NULL);
+    maelys_http_client_limits_default(&limits);
+    limits.max_connection_reuses = 0u;
+    CHECK(maelys_http_client_create(transport, &limits, &client) ==
+          MAELYS_HTTP_ERR_ARGUMENT);
+    limits.max_connection_reuses = 65537u;
+    CHECK(maelys_http_client_create(transport, &limits, &client) ==
+          MAELYS_HTTP_ERR_ARGUMENT);
+    maelys_http_client_limits_default(&limits);
+    limits.idle_connection_ttl_ms = 0u;
+    CHECK(maelys_http_client_create(transport, &limits, &client) ==
+          MAELYS_HTTP_ERR_ARGUMENT);
+    limits.idle_connection_ttl_ms = 3600001u;
+    CHECK(maelys_http_client_create(transport, &limits, &client) ==
+          MAELYS_HTTP_ERR_ARGUMENT);
+    CHECK(client == NULL);
+    maelys_http_transport_release(transport);
+    return 0;
+}
+
 static int test_reuse_single_connection(void) {
     ka_context_t context;
     maelys_http_transport_t *transport;
@@ -1075,6 +1102,27 @@ static int test_reuse_single_connection(void) {
     return 0;
 }
 
+static int test_reuse_ipv6_default_port_canonicalization(void) {
+    ka_context_t context;
+    maelys_http_transport_t *transport;
+    maelys_http_client_t *client = NULL;
+    memset(&context, 0, sizeof(context));
+    context.responses[0] = "HTTP/1.1 200 OK\r\nContent-Length: 3\r\n\r\none";
+    context.responses[1] = "HTTP/1.1 200 OK\r\nContent-Length: 3\r\n\r\ntwo";
+    context.response_count = 2u;
+    transport = make_ka_transport(&context);
+    CHECK(transport != NULL);
+    CHECK(maelys_http_client_create(transport, NULL, &client) == MAELYS_HTTP_OK);
+    CHECK(maelys_http_client_set_connection_reuse(client, 1) == MAELYS_HTTP_OK);
+    CHECK(ka_get(client, "[2001:DB8::1]", 200u, "one") == 0);
+    CHECK(ka_get(client, "[2001:db8::1]:80", 200u, "two") == 0);
+    CHECK(context.opens == 1u);
+    maelys_http_client_release(client);
+    maelys_http_transport_release(transport);
+    CHECK(context.releases == context.opens);
+    return 0;
+}
+
 static int test_reuse_honors_response_connection_close(void) {
     ka_context_t context;
     maelys_http_transport_t *transport;
@@ -1089,6 +1137,55 @@ static int test_reuse_honors_response_connection_close(void) {
     CHECK(transport != NULL);
     CHECK(maelys_http_client_create(transport, NULL, &client) == MAELYS_HTTP_OK);
     CHECK(maelys_http_client_set_connection_reuse(client, 1) == MAELYS_HTTP_OK);
+    CHECK(ka_get(client, "example.test", 200u, "one") == 0);
+    CHECK(ka_get(client, "example.test", 200u, "two") == 0);
+    CHECK(context.opens == 2u);
+    maelys_http_client_release(client);
+    maelys_http_transport_release(transport);
+    CHECK(context.releases == context.opens);
+    return 0;
+}
+
+static int test_reuse_idle_peer_close_redials(void) {
+    ka_context_t context;
+    maelys_http_transport_t *transport;
+    maelys_http_client_t *client = NULL;
+    memset(&context, 0, sizeof(context));
+    context.responses[0] = "HTTP/1.1 200 OK\r\nContent-Length: 3\r\n\r\none";
+    context.responses[1] = "HTTP/1.1 200 OK\r\nContent-Length: 3\r\n\r\ntwo";
+    context.response_count = 2u;
+    /* The first response is self-delimiting and carries no close token, but
+     * the peer closes immediately after it. The idle probe must discard the
+     * parked stream before the second request writes a byte. */
+    context.close_after[0] = 1;
+    transport = make_ka_transport(&context);
+    CHECK(transport != NULL);
+    CHECK(maelys_http_client_create(transport, NULL, &client) == MAELYS_HTTP_OK);
+    CHECK(maelys_http_client_set_connection_reuse(client, 1) == MAELYS_HTTP_OK);
+    CHECK(ka_get(client, "example.test", 200u, "one") == 0);
+    CHECK(ka_get(client, "example.test", 200u, "two") == 0);
+    CHECK(context.opens == 2u);
+    maelys_http_client_release(client);
+    maelys_http_transport_release(transport);
+    CHECK(context.releases == context.opens);
+    return 0;
+}
+
+static int test_reuse_excess_bytes_redials(void) {
+    ka_context_t context;
+    maelys_http_transport_t *transport;
+    maelys_http_client_t *client = NULL;
+    memset(&context, 0, sizeof(context));
+    context.responses[0] =
+        "HTTP/1.1 200 OK\r\nContent-Length: 3\r\n\r\noneX";
+    context.responses[1] = "HTTP/1.1 200 OK\r\nContent-Length: 3\r\n\r\ntwo";
+    context.response_count = 2u;
+    transport = make_ka_transport(&context);
+    CHECK(transport != NULL);
+    CHECK(maelys_http_client_create(transport, NULL, &client) == MAELYS_HTTP_OK);
+    CHECK(maelys_http_client_set_connection_reuse(client, 1) == MAELYS_HTTP_OK);
+    /* The framed response remains a successful exchange, but the stray byte
+     * makes the physical connection unusable for a subsequent response. */
     CHECK(ka_get(client, "example.test", 200u, "one") == 0);
     CHECK(ka_get(client, "example.test", 200u, "two") == 0);
     CHECK(context.opens == 2u);
@@ -1352,8 +1449,12 @@ int main(void) {
     CHECK(test_redirect_head_limit_precedes_second_open() == 0);
     CHECK(test_informational_and_upgrade_limits() == 0);
     CHECK(test_reuse_disabled_by_default_sends_close() == 0);
+    CHECK(test_reuse_limit_validation() == 0);
     CHECK(test_reuse_single_connection() == 0);
+    CHECK(test_reuse_ipv6_default_port_canonicalization() == 0);
     CHECK(test_reuse_honors_response_connection_close() == 0);
+    CHECK(test_reuse_idle_peer_close_redials() == 0);
+    CHECK(test_reuse_excess_bytes_redials() == 0);
     CHECK(test_reuse_idle_ttl_expiry_redials() == 0);
     CHECK(test_reuse_budget_exhaustion_redials() == 0);
     CHECK(test_reuse_framing_error_destroys_and_surfaces() == 0);

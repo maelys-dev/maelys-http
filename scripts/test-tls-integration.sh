@@ -3,6 +3,7 @@ set -eu
 
 root="$(mktemp -d)"
 ready="$root/ready"
+report="$root/report"
 port=
 server_pid=
 cleanup() {
@@ -21,7 +22,7 @@ openssl req -x509 -newkey rsa:2048 -nodes -days 1 \
     -subj /CN=other -addext subjectAltName=DNS:other \
     -keyout "$root/other.key" -out "$root/other.crt" >/dev/null 2>&1
 
-python3 tests/https_server.py 0 "$root/server.crt" "$root/server.key" "$ready" \
+python3 tests/https_server.py 0 "$root/server.crt" "$root/server.key" "$ready" "$report" \
     >"$root/server.log" 2>&1 &
 server_pid=$!
 i=0
@@ -48,6 +49,42 @@ case "$port" in
 esac
 
 build/tls_integration_client "$root/server.crt" "localhost:$port"
+build/tls_integration_client "$root/server.crt" "localhost:$port" reuse
+build/tls_integration_client "$root/server.crt" "localhost:$port" close
+build/tls_integration_client "$root/server.crt" "localhost:$port" silent-close
+
+i=0
+while [ "$i" -lt 100 ]; do
+    lines="$(wc -l <"$report" | tr -d ' ')"
+    if [ "$lines" -ge 7 ]; then
+        break
+    fi
+    i=$((i + 1))
+    sleep .05
+done
+if [ "$i" -ge 100 ]; then
+    cat "$root/server.log" >&2
+    cat "$report" >&2
+    echo 'TLS keep-alive observations timed out' >&2
+    exit 1
+fi
+
+# Line 1 is the conservative single exchange. The reuse pair must share one
+# physical TCP/TLS connection; Connection: close and a silent peer shutdown
+# must each force a fresh connection for their second exchange.
+if ! awk '
+    NR == 2 { reuse = $1; ok = ($2 == "/one") }
+    NR == 3 { ok = ok && $1 == reuse && $2 == "/two" }
+    NR == 4 { closing = $1; ok = ok && $2 == "/close" }
+    NR == 5 { ok = ok && $1 != closing && $2 == "/two" }
+    NR == 6 { silent = $1; ok = ok && $2 == "/silent-close" }
+    NR == 7 { ok = ok && $1 != silent && $2 == "/two" }
+    END { exit ok ? 0 : 1 }
+' "$report"; then
+    cat "$report" >&2
+    echo 'TLS keep-alive connection identity invariant failed' >&2
+    exit 1
+fi
 if build/tls_integration_client "$root/server.crt" "127.0.0.1:$port"; then
     echo 'hostname mismatch was accepted' >&2
     exit 1
@@ -56,4 +93,4 @@ if build/tls_integration_client "$root/other.crt" "localhost:$port"; then
     echo 'unknown authority was accepted' >&2
     exit 1
 fi
-echo 'TLS integration: CA, hostname and unknown-authority gates passed'
+echo 'TLS integration: keep-alive, peer-close, CA, hostname and authority gates passed'
