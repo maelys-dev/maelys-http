@@ -55,7 +55,7 @@ jobs:
           test "$GITHUB_REF_NAME" = "v$version"
           ./scripts/package-release.sh "$version"
           make package-homebrew
-          sha256sum "dist/maelys-http-$version.tar.gz" >dist/SHA256SUMS
+          (cd dist && sha256sum "maelys-http-$version.tar.gz" >SHA256SUMS)
       - name: Publish GitHub release
         env:
           GH_TOKEN: ${{ github.token }}

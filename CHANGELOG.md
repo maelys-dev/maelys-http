@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.1 - 2026-09-01
+
+### Fixed
+
+- Emit release checksum manifests with archive basenames so they verify after
+  GitHub assets are downloaded outside the build tree.
+
 ## 0.1.0 - 2026-09-01
 
 ### Added
