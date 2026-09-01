@@ -26,6 +26,10 @@
   self-delimiting response with no `close` token or buffered excess bytes.
   Reuse count and idle lifetime are bounded; an expired, non-quiet or
   differently keyed connection is destroyed before the next request is sent.
+  No request is automatically retried after any request octet may have been
+  written. If a parked connection dies between its quietness probe and the
+  next write, the exchange fails and the caller decides whether its operation
+  is safe to retry.
 - Redirects require an application decision. `Authorization`, `Cookie`, and
   `Proxy-Authorization` are stripped whenever scheme or authority changes.
 - The shipped Mbed TLS provider requires an explicit trust anchor, TLS 1.2 or

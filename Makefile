@@ -32,7 +32,8 @@ TEST_BINS := $(BUILD)/test_parser $(BUILD)/test_conformance $(BUILD)/test_messag
 
 .PHONY: all clean check check-version test sanitizers tsan fuzzers \
 	fuzz-libfuzzer install uninstall check-system-pin install-check package \
-	package-homebrew check-mbedtls tls-integration install-mbedtls
+	package-homebrew package-reproducibility-check check-mbedtls tls-integration \
+	install-mbedtls
 
 all: $(BUILD)/libmaelys_http.a $(BUILD)/libmaelys_http_client.a
 
@@ -286,6 +287,9 @@ install-check: all
 
 package: check
 	./scripts/package-release.sh $(VERSION)
+
+package-reproducibility-check:
+	./scripts/test-source-package.sh
 
 package-homebrew:
 	./scripts/render-homebrew-formula.sh
