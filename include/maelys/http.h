@@ -11,7 +11,7 @@ extern "C" {
 #define MAELYS_HTTP_ABI_VERSION 1u
 #define MAELYS_HTTP_VERSION_MAJOR 0u
 #define MAELYS_HTTP_VERSION_MINOR 1u
-#define MAELYS_HTTP_VERSION_PATCH 1u
+#define MAELYS_HTTP_VERSION_PATCH 2u
 
 typedef enum maelys_http_result {
     MAELYS_HTTP_OK = 0,

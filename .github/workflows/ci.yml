@@ -41,7 +41,7 @@ jobs:
       - name: Build dependency
         run: make -C maelys-system CC=${{ matrix.cc }} CXX=${{ matrix.cxx }}
       - name: Build and test
-        run: make -C maelys-http clean check install-check check-system-pin CC=${{ matrix.cc }} CXX=${{ matrix.cxx }} SYSTEM_DIR=../maelys-system
+        run: make -C maelys-http clean check install-check check-system-pin package-reproducibility-check CC=${{ matrix.cc }} CXX=${{ matrix.cxx }} SYSTEM_DIR=../maelys-system
       - name: Architecture
         run: uname -m
 

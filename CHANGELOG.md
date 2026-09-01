@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.1.2 - 2026-09-01
+
+### Fixed
+
+- Publish and checksum the canonical uncompressed source tar alongside the
+  gzip convenience archive, so the source-tree digest is reproducible across
+  gzip implementations on macOS and Linux.
+- Document that connection reuse never retries a request after any request
+  octet may have been written; callers retain responsibility for method-aware
+  retry policy after an ambiguous transport failure.
+
 ## 0.1.1 - 2026-09-01
 
 ### Fixed

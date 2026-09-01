@@ -53,14 +53,14 @@ jobs:
         run: |
           version=$(cat VERSION)
           test "$GITHUB_REF_NAME" = "v$version"
-          ./scripts/package-release.sh "$version"
+          make package-reproducibility-check
           make package-homebrew
-          (cd dist && sha256sum "maelys-http-$version.tar.gz" >SHA256SUMS)
       - name: Publish GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "$GITHUB_REF_NAME" \
+            dist/maelys-http-*.tar dist/maelys-http-*.tar.sha256 \
             dist/maelys-http-*.tar.gz dist/maelys-http-*.tar.gz.sha256 \
             dist/SHA256SUMS dist/homebrew/maelys-http.rb \
             --verify-tag --generate-notes --title "Maelys HTTP $GITHUB_REF_NAME"

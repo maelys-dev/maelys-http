@@ -45,6 +45,12 @@ automatically replayed for 301/302/307/308. A 303 may switch to GET. On any
 scheme or authority change, sensitive credentials are removed before the next
 request regardless of callback behavior.
 
+Connection reuse performs no transparent request retry. A parked connection
+is probed before adoption; a connection already known to be closed is discarded
+and a fresh one is dialed before sending. A close or I/O error after that probe
+fails the exchange once any request octet might have been written. The caller,
+which knows the method and application semantics, owns any subsequent retry.
+
 Before the callback runs, the library resolves a supported `Location` into a
 validated `(scheme, authority, origin-form target)` tuple. No transport open,
 DNS lookup or connection for the new authority occurs until the callback says
