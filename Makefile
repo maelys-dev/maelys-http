@@ -25,7 +25,8 @@ BUILD := build
 CORE_OBJECTS := $(BUILD)/common.o $(BUILD)/parser.o $(BUILD)/message.o $(BUILD)/tls.o
 CLIENT_OBJECTS := $(BUILD)/client.o $(BUILD)/resolver.o \
 	$(BUILD)/resolver_posix.o $(BUILD)/transport_posix.o
-TEST_BINS := $(BUILD)/test_parser $(BUILD)/test_message $(BUILD)/test_client \
+TEST_BINS := $(BUILD)/test_parser $(BUILD)/test_conformance $(BUILD)/test_message \
+	$(BUILD)/test_client \
 	$(BUILD)/test_transport_posix $(BUILD)/test_resolver_internal \
 	$(BUILD)/test_tls_provider $(BUILD)/header_cpp
 
@@ -63,6 +64,9 @@ $(BUILD)/libmaelys_http_client.a: $(CLIENT_OBJECTS)
 $(BUILD)/test_parser: tests/test_parser.c $(BUILD)/libmaelys_http.a
 	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libmaelys_http.a -o $@
 
+$(BUILD)/test_conformance: tests/test_conformance.c $(BUILD)/libmaelys_http.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libmaelys_http.a -o $@
+
 $(BUILD)/test_message: tests/test_message.c $(BUILD)/libmaelys_http.a
 	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libmaelys_http.a -o $@
 
@@ -93,6 +97,7 @@ $(SYSTEM_LIB):
 
 test: $(TEST_BINS)
 	$(BUILD)/test_parser
+	$(BUILD)/test_conformance conformance/response-wire-cases.txt
 	$(BUILD)/test_message
 	$(BUILD)/test_client
 	$(BUILD)/test_transport_posix

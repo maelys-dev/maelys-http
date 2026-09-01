@@ -1,0 +1,454 @@
+# Adversarial wire conformance corpus for src/parser.c in RESPONSE mode.
+#
+# Run by tests/test_conformance.c (the Makefile passes this file's path).
+# Every vector is the EXACT byte sequence a server puts on the socket,
+# spelled with escapes so no literal CR, LF or NUL ever appears in this file
+# and no editor or git CRLF rule can silently rewrite a vector.
+#
+# The format, the escape grammar and the verdict vocabulary are documented
+# in conformance/format.md. Each case is three lines, blank-line separated:
+#   name:   <the rule or property this vector exercises>
+#   expect: accept none|cl=<n>|chunked|until-eof [body=<n>] [excess=<n>]
+#           [status=<n>] | reject SYNTAX|FRAMING|LIMIT | incomplete
+#   wire:   <escaped response bytes>
+#
+# These are PARSER verdicts: framing, status-line and header grammar only.
+# Every vector runs against a default-limits parser in its default mode
+# (no HEAD or CONNECT context), and is asserted at several chunk
+# fragmentations with split equivalence.
+
+# ===== acceptance: the baseline shapes the corpus then bends
+
+name: a plain 200 with Content-Length framing is complete when the body is
+expect: accept cl=5 status=200
+wire: HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nhello
+
+name: Content-Length: 0 completes at the header terminator
+expect: accept cl=0
+wire: HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n
+
+name: a Content-Length with leading zeroes is 1*DIGIT and is accepted
+expect: accept cl=7
+wire: HTTP/1.1 200 OK\r\nContent-Length: 007\r\n\r\n0123456
+
+name: Content-Length wrapped in HTAB OWS is trimmed and accepted
+expect: accept cl=2
+wire: HTTP/1.1 200 OK\r\nContent-Length:\t2\t\r\n\r\n{}
+
+name: body bytes are opaque: NUL and high bytes pass through untouched
+expect: accept cl=4
+wire: HTTP/1.1 200 OK\r\nContent-Length: 4\r\n\r\n\0\xff\x80a
+
+name: a reason phrase may carry spaces, HTAB and high bytes
+expect: accept cl=0 status=503
+wire: HTTP/1.1 503 D\xc3\xa9sol\xc3\xa9,\tservice saturated\r\nContent-Length: 0\r\n\r\n
+
+name: an empty reason is accepted when the space before it is on the wire
+expect: accept cl=0 status=200
+wire: HTTP/1.1 200 \r\nContent-Length: 0\r\n\r\n
+
+name: Connection tokens are data to the parser, not framing
+expect: accept cl=2
+wire: HTTP/1.1 200 OK\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5, max=99\r\nContent-Length: 2\r\n\r\n{}
+
+name: a weird but grammatical Connection list does not change the verdict
+expect: accept cl=0
+wire: HTTP/1.1 200 OK\r\nConnection: Keep-Alive, X-Weird-Token, close\r\nContent-Length: 0\r\n\r\n
+
+# ======================================= status-line grammar
+
+name: HTTP/1.0 is not this parser's protocol
+expect: reject SYNTAX
+wire: HTTP/1.0 200 OK\r\n\r\n
+
+name: HTTP/2 without the dotted minor is refused
+expect: reject SYNTAX
+wire: HTTP/2 200 OK\r\n\r\n
+
+name: a lowercase http/1.1 is not HTTP/1.1
+expect: reject SYNTAX
+wire: http/1.1 200 OK\r\n\r\n
+
+name: the single space between version and status is mandatory
+expect: reject SYNTAX
+wire: HTTP/1.1200 OK\r\n\r\n
+
+name: a doubled space shifts the status field and is refused
+expect: reject SYNTAX
+wire: HTTP/1.1  200 OK\r\n\r\n
+
+name: a two-digit status is not status-code = 3DIGIT
+expect: reject SYNTAX
+wire: HTTP/1.1 99 OK\r\n\r\n
+
+name: a four-digit status is refused at the missing space
+expect: reject SYNTAX
+wire: HTTP/1.1 2000 OK\r\n\r\n
+
+name: a letter inside the status digits is refused
+expect: reject SYNTAX
+wire: HTTP/1.1 2x0 OK\r\n\r\n
+
+name: status 099 is three digits but below the 1xx floor
+expect: reject SYNTAX
+wire: HTTP/1.1 099 Sub\r\n\r\n
+
+name: status 600 is three digits but above the 5xx ceiling
+expect: reject SYNTAX
+wire: HTTP/1.1 600 Beyond\r\n\r\n
+
+name: a status line with no space-and-reason at all is too short
+expect: reject SYNTAX
+wire: HTTP/1.1 200\r\n\r\n
+
+name: garbage before the version is not a status line
+expect: reject SYNTAX
+wire: X HTTP/1.1 200 OK\r\n\r\n
+
+name: a DEL byte in the reason phrase is refused
+expect: reject SYNTAX
+wire: HTTP/1.1 200 O\x7fK\r\n\r\n
+
+name: a NUL byte in the reason phrase is refused at the byte level
+expect: reject SYNTAX
+wire: HTTP/1.1 200 O\0K\r\n\r\n
+
+# ============= line discipline: CRLF is the only line ending
+
+name: a bare LF cannot terminate the status line
+expect: reject SYNTAX
+wire: HTTP/1.1 200 OK\nContent-Length: 0\r\n\r\n
+
+name: a bare LF cannot terminate a header line
+expect: reject SYNTAX
+wire: HTTP/1.1 200 OK\r\nContent-Length: 0\n\r\n
+
+name: a bare CR in the middle of a header value is refused
+expect: reject SYNTAX
+wire: HTTP/1.1 200 OK\r\nX-Note: a\rb\r\nContent-Length: 0\r\n\r\n
+
+name: a bare CR after the reason phrase must be followed by LF
+expect: reject SYNTAX
+wire: HTTP/1.1 404 Not Found\rX\r\n\r\n
+
+name: a NUL inside a header value is refused
+expect: reject SYNTAX
+wire: HTTP/1.1 200 OK\r\nX-Note: a\0b\r\nContent-Length: 0\r\n\r\n
+
+name: an empty line before the status line is not tolerated as prelude
+expect: reject SYNTAX
+wire: \r\nHTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n
+
+name: a lone LF as the very first byte is refused
+expect: reject SYNTAX
+wire: \nHTTP/1.1 200 OK\r\n\r\n
+
+# ============================================ header grammar
+
+name: obs-fold: a header line starting with SP is refused, never unfolded
+expect: reject SYNTAX
+wire: HTTP/1.1 200 OK\r\nX-Long: part one\r\n and part two\r\nContent-Length: 0\r\n\r\n
+
+name: obs-fold with HTAB is the same refusal
+expect: reject SYNTAX
+wire: HTTP/1.1 200 OK\r\nX-Long: part one\r\n\tand part two\r\nContent-Length: 0\r\n\r\n
+
+name: a header line without a colon is refused
+expect: reject SYNTAX
+wire: HTTP/1.1 200 OK\r\nNoColonHere\r\nContent-Length: 0\r\n\r\n
+
+name: an empty header name is refused
+expect: reject SYNTAX
+wire: HTTP/1.1 200 OK\r\n: value\r\nContent-Length: 0\r\n\r\n
+
+name: whitespace before the colon makes the name a non-token
+expect: reject SYNTAX
+wire: HTTP/1.1 200 OK\r\nX-Name : v\r\nContent-Length: 0\r\n\r\n
+
+name: a bracket in a header name is not a tchar
+expect: reject SYNTAX
+wire: HTTP/1.1 200 OK\r\nX-Na[me: v\r\nContent-Length: 0\r\n\r\n
+
+name: a DEL byte in a header value is refused
+expect: reject SYNTAX
+wire: HTTP/1.1 200 OK\r\nX-Note: a\x7fb\r\nContent-Length: 0\r\n\r\n
+
+# ===================== Content-Length grammar and arithmetic
+
+name: two equal Content-Lengths are still two Content-Lengths
+expect: reject FRAMING
+wire: HTTP/1.1 200 OK\r\nContent-Length: 5\r\nContent-Length: 5\r\n\r\nhello
+
+name: two unequal Content-Lengths cannot both be the frame
+expect: reject FRAMING
+wire: HTTP/1.1 200 OK\r\nContent-Length: 5\r\nContent-Length: 6\r\n\r\nhello
+
+name: a plus sign is not 1*DIGIT
+expect: reject FRAMING
+wire: HTTP/1.1 200 OK\r\nContent-Length: +5\r\n\r\nhello
+
+name: a negative length is not 1*DIGIT
+expect: reject FRAMING
+wire: HTTP/1.1 200 OK\r\nContent-Length: -5\r\n\r\nhello
+
+name: hex spelling of the length is not 1*DIGIT
+expect: reject FRAMING
+wire: HTTP/1.1 200 OK\r\nContent-Length: 0x10\r\n\r\n
+
+name: an embedded space splits the digits and is refused
+expect: reject FRAMING
+wire: HTTP/1.1 200 OK\r\nContent-Length: 5 5\r\n\r\nhello
+
+name: an embedded HTAB inside the digits is refused
+expect: reject FRAMING
+wire: HTTP/1.1 200 OK\r\nContent-Length: 5\t5\r\n\r\nhello
+
+name: a comma-joined length list is refused, not first-wins
+expect: reject FRAMING
+wire: HTTP/1.1 200 OK\r\nContent-Length: 5, 5\r\n\r\nhello
+
+name: an empty Content-Length value is refused
+expect: reject FRAMING
+wire: HTTP/1.1 200 OK\r\nContent-Length:\r\n\r\n
+
+name: 2^64 does not fit and is refused as framing, not wrapped
+expect: reject FRAMING
+wire: HTTP/1.1 200 OK\r\nContent-Length: 18446744073709551616\r\n\r\n
+
+name: UINT64_MAX parses but is over the body budget
+expect: reject LIMIT
+wire: HTTP/1.1 200 OK\r\nContent-Length: 18446744073709551615\r\n\r\n
+
+name: one byte over the 64 MiB body budget is a limit refusal
+expect: reject LIMIT
+wire: HTTP/1.1 200 OK\r\nContent-Length: 67108865\r\n\r\n
+
+name: exactly the 64 MiB budget is legal framing, so the body is awaited
+expect: incomplete
+wire: HTTP/1.1 200 OK\r\nContent-Length: 67108864\r\n\r\n
+
+# ========================================= Transfer-Encoding
+
+name: chunked with a terminal chunk is complete
+expect: accept chunked body=5
+wire: HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nhello\r\n0\r\n\r\n
+
+name: case-obfuscated ChUnKeD is token-compared and still chunked
+expect: accept chunked body=5
+wire: HTTP/1.1 200 OK\r\nTransfer-Encoding: ChUnKeD\r\n\r\n5\r\nhello\r\n0\r\n\r\n
+
+name: OWS around the chunked token is trimmed
+expect: accept chunked body=5
+wire: HTTP/1.1 200 OK\r\nTransfer-Encoding:  chunked \r\n\r\n5\r\nhello\r\n0\r\n\r\n
+
+name: chunked, chunked is a list, and only the bare token is accepted
+expect: reject FRAMING
+wire: HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked, chunked\r\n\r\n5\r\nhello\r\n0\r\n\r\n
+
+name: gzip is a coding this client never negotiates
+expect: reject FRAMING
+wire: HTTP/1.1 200 OK\r\nTransfer-Encoding: gzip\r\n\r\n
+
+name: identity is not exactly chunked either
+expect: reject FRAMING
+wire: HTTP/1.1 200 OK\r\nTransfer-Encoding: identity\r\n\r\n
+
+name: an empty Transfer-Encoding value is refused
+expect: reject FRAMING
+wire: HTTP/1.1 200 OK\r\nTransfer-Encoding:\r\n\r\n
+
+name: a second Transfer-Encoding header is refused even if both say chunked
+expect: reject FRAMING
+wire: HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nTransfer-Encoding: chunked\r\n\r\n0\r\n\r\n
+
+# ============= Content-Length and Transfer-Encoding together
+
+name: Content-Length before Transfer-Encoding is a desync, refused
+expect: reject FRAMING
+wire: HTTP/1.1 200 OK\r\nContent-Length: 5\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nhello\r\n0\r\n\r\n
+
+name: Transfer-Encoding before Content-Length is the same desync
+expect: reject FRAMING
+wire: HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nContent-Length: 5\r\n\r\n5\r\nhello\r\n0\r\n\r\n
+
+name: even on a bodiless 204 the CL+TE pair is refused first
+expect: reject FRAMING
+wire: HTTP/1.1 204 No Content\r\nContent-Length: 0\r\nTransfer-Encoding: chunked\r\n\r\n
+
+# ========================== bodiless statuses: 1xx, 204, 304
+
+name: a 204 completes at the header terminator with no body framing
+expect: accept none status=204
+wire: HTTP/1.1 204 No Content\r\nX-Note: ok\r\n\r\n
+
+name: a 304 completes at the header terminator with no body framing
+expect: accept none status=304
+wire: HTTP/1.1 304 Not Modified\r\nETag: "abc"\r\n\r\n
+
+name: a 100 is a complete message; the real response is unconsumed excess
+expect: accept none status=100 excess=38
+wire: HTTP/1.1 100 Continue\r\n\r\nHTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n
+
+name: a 101 completes at the headers; upgraded-protocol bytes are excess
+expect: accept none status=101 excess=7
+wire: HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n\r\n\x81\x05hello
+
+name: Content-Length on a 204 does not resurrect a body; the bytes are excess
+expect: accept none status=204 excess=5
+wire: HTTP/1.1 204 No Content\r\nContent-Length: 5\r\n\r\nhello
+
+name: Transfer-Encoding on a 304 is ignored for framing; chunks become excess
+expect: accept none status=304 excess=15
+wire: HTTP/1.1 304 Not Modified\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nhello\r\n0\r\n\r\n
+
+name: a 204 still validates Content-Length grammar before ignoring it
+expect: reject FRAMING
+wire: HTTP/1.1 204 No Content\r\nContent-Length: abc\r\n\r\n
+
+name: a bodiless 204 skips the body budget check on its ignored length
+expect: accept none status=204
+wire: HTTP/1.1 204 No Content\r\nContent-Length: 67108865\r\n\r\n
+
+# ====================================== chunked body framing
+
+name: a chunk-size extension in token=token form is grammatical
+expect: accept chunked body=5
+wire: HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n5;name=value\r\nhello\r\n0\r\n\r\n
+
+name: a quoted chunk-extension value may carry spaces
+expect: accept chunked body=4
+wire: HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n4;a="b c"\r\nWiki\r\n0\r\n\r\n
+
+name: two extensions on one chunk-size line are grammatical
+expect: accept chunked body=4
+wire: HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n4;a=b;c\r\nWiki\r\n0\r\n\r\n
+
+name: a non-hex chunk size is refused
+expect: reject SYNTAX
+wire: HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\ng\r\nhello\r\n0\r\n\r\n
+
+name: an empty chunk-size line has no digits and is refused
+expect: reject SYNTAX
+wire: HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n\r\n0\r\n\r\n
+
+name: a space before the chunk size is not chunk-size grammar
+expect: reject SYNTAX
+wire: HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n 5\r\nhello\r\n0\r\n\r\n
+
+name: a space after the chunk size without an extension is refused
+expect: reject SYNTAX
+wire: HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n5 \r\nhello\r\n0\r\n\r\n
+
+name: a semicolon with no extension token is refused
+expect: reject SYNTAX
+wire: HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n5;\r\nhello\r\n0\r\n\r\n
+
+name: an extension equals-sign with no name is refused
+expect: reject SYNTAX
+wire: HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n5;=v\r\nhello\r\n0\r\n\r\n
+
+name: an unterminated quoted extension value is refused
+expect: reject SYNTAX
+wire: HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n5;a="b\r\nhello\r\n0\r\n\r\n
+
+name: chunk data must be followed by CR, not more data
+expect: reject SYNTAX
+wire: HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n3\r\nabcX\r\n0\r\n\r\n
+
+name: a bare LF after chunk data is not the chunk CRLF
+expect: reject SYNTAX
+wire: HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n3\r\nabc\n0\r\n\r\n
+
+name: a bare LF terminating the chunk-size line is refused
+expect: reject SYNTAX
+wire: HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n3\nabc\r\n0\r\n\r\n
+
+name: a 17-hex-digit chunk size overflows and is refused as a limit
+expect: reject LIMIT
+wire: HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n11111111111111111\r\n
+
+name: a single chunk over the 64 MiB body budget is refused
+expect: reject LIMIT
+wire: HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n4000001\r\n
+
+name: a chunked stream without its terminal chunk is held, not completed
+expect: incomplete
+wire: HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nhello\r\n
+
+# ================================================== trailers
+
+name: a benign trailer after the terminal chunk is accepted
+expect: accept chunked body=9
+wire: HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n4\r\nWiki\r\n5\r\npedia\r\n0\r\nX-Digest: ok\r\n\r\n
+
+name: Content-Length may not hide in the trailers
+expect: reject FRAMING
+wire: HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n0\r\nContent-Length: 5\r\n\r\n
+
+name: Transfer-Encoding may not hide in the trailers
+expect: reject FRAMING
+wire: HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n0\r\nTransfer-Encoding: chunked\r\n\r\n
+
+name: the Trailer header itself may not appear in the trailers
+expect: reject FRAMING
+wire: HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n0\r\nTrailer: X-Digest\r\n\r\n
+
+name: obs-fold in a trailer is the same refusal as in a header
+expect: reject SYNTAX
+wire: HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n0\r\nX-A: one\r\n two\r\n\r\n
+
+name: the thirty-third trailer is over the trailer-count limit
+expect: reject LIMIT
+wire: HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n0\r\nT0: v\r\nT1: v\r\nT2: v\r\nT3: v\r\nT4: v\r\nT5: v\r\nT6: v\r\nT7: v\r\nT8: v\r\nT9: v\r\nT10: v\r\nT11: v\r\nT12: v\r\nT13: v\r\nT14: v\r\nT15: v\r\nT16: v\r\nT17: v\r\nT18: v\r\nT19: v\r\nT20: v\r\nT21: v\r\nT22: v\r\nT23: v\r\nT24: v\r\nT25: v\r\nT26: v\r\nT27: v\r\nT28: v\r\nT29: v\r\nT30: v\r\nT31: v\r\nT32: v\r\n\r\n
+
+# =================================== EOF-delimited responses
+
+name: no Content-Length and no Transfer-Encoding reads until close
+expect: accept until-eof body=3
+wire: HTTP/1.1 200 OK\r\nX-Note: y\r\n\r\nabc
+
+name: an EOF-delimited response may have delivered nothing yet
+expect: accept until-eof body=0
+wire: HTTP/1.1 200 OK\r\n\r\n
+
+name: Connection: close with a body is until-EOF framing
+expect: accept until-eof body=12
+wire: HTTP/1.1 200 OK\r\nConnection: close\r\nContent-Type: text/plain\r\n\r\nhello, world
+
+# ==== truncation is incomplete, and an EOF there is a framing error
+
+name: a truncated status line is held
+expect: incomplete
+wire: HTTP/1.1 200 O
+
+name: a truncated header line is held
+expect: incomplete
+wire: HTTP/1.1 200 OK\r\nContent-Le
+
+name: a declared body with missing bytes is held
+expect: incomplete
+wire: HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nabc
+
+name: headers complete but the header terminator is half-sent
+expect: incomplete
+wire: HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r
+
+# ==== keep-alive: stray bytes after a complete framed response
+
+name: bytes after a Content-Length frame are excess, never body
+expect: accept cl=3 excess=38
+wire: HTTP/1.1 200 OK\r\nContent-Length: 3\r\n\r\nabcHTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n
+
+name: bytes after the terminal chunk's trailers are excess
+expect: accept chunked body=5 excess=3
+wire: HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nhello\r\n0\r\n\r\nXYZ
+
+name: a zero-length frame leaves the entire next response unconsumed
+expect: accept cl=0 excess=38
+wire: HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\nHTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n
+
+# ======================================== header-count limit
+
+name: the one-hundred-twenty-ninth header is over the header-count limit
+expect: reject LIMIT
+wire: HTTP/1.1 200 OK\r\nH0: v\r\nH1: v\r\nH2: v\r\nH3: v\r\nH4: v\r\nH5: v\r\nH6: v\r\nH7: v\r\nH8: v\r\nH9: v\r\nH10: v\r\nH11: v\r\nH12: v\r\nH13: v\r\nH14: v\r\nH15: v\r\nH16: v\r\nH17: v\r\nH18: v\r\nH19: v\r\nH20: v\r\nH21: v\r\nH22: v\r\nH23: v\r\nH24: v\r\nH25: v\r\nH26: v\r\nH27: v\r\nH28: v\r\nH29: v\r\nH30: v\r\nH31: v\r\nH32: v\r\nH33: v\r\nH34: v\r\nH35: v\r\nH36: v\r\nH37: v\r\nH38: v\r\nH39: v\r\nH40: v\r\nH41: v\r\nH42: v\r\nH43: v\r\nH44: v\r\nH45: v\r\nH46: v\r\nH47: v\r\nH48: v\r\nH49: v\r\nH50: v\r\nH51: v\r\nH52: v\r\nH53: v\r\nH54: v\r\nH55: v\r\nH56: v\r\nH57: v\r\nH58: v\r\nH59: v\r\nH60: v\r\nH61: v\r\nH62: v\r\nH63: v\r\nH64: v\r\nH65: v\r\nH66: v\r\nH67: v\r\nH68: v\r\nH69: v\r\nH70: v\r\nH71: v\r\nH72: v\r\nH73: v\r\nH74: v\r\nH75: v\r\nH76: v\r\nH77: v\r\nH78: v\r\nH79: v\r\nH80: v\r\nH81: v\r\nH82: v\r\nH83: v\r\nH84: v\r\nH85: v\r\nH86: v\r\nH87: v\r\nH88: v\r\nH89: v\r\nH90: v\r\nH91: v\r\nH92: v\r\nH93: v\r\nH94: v\r\nH95: v\r\nH96: v\r\nH97: v\r\nH98: v\r\nH99: v\r\nH100: v\r\nH101: v\r\nH102: v\r\nH103: v\r\nH104: v\r\nH105: v\r\nH106: v\r\nH107: v\r\nH108: v\r\nH109: v\r\nH110: v\r\nH111: v\r\nH112: v\r\nH113: v\r\nH114: v\r\nH115: v\r\nH116: v\r\nH117: v\r\nH118: v\r\nH119: v\r\nH120: v\r\nH121: v\r\nH122: v\r\nH123: v\r\nH124: v\r\nH125: v\r\nH126: v\r\nH127: v\r\nH128: v\r\nContent-Length: 0\r\n\r\n
