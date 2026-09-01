@@ -66,7 +66,8 @@ to CONNECT, in which case a successful response ends at the header boundary.
 The same parser start-line, per-header-line, cumulative-header and header-count
 limits are applied to the serialized request before the transport is opened.
 They count the exact HTTP/1.1 wire bytes, including every CRLF, the generated
-`Host`, `Connection` and framing fields, and the terminating empty line.
+`Host`, `Connection` (omitted when connection reuse is enabled) and framing
+fields, and the terminating empty line.
 
 This shape deliberately preserves the future MCP HTTPS connector case: POST
 request streaming, JSON or long-lived SSE/chunked responses, cancellation and

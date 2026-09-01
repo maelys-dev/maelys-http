@@ -1,0 +1,66 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            install: sudo apt-get update && sudo apt-get install -y libmbedtls-dev
+          - runner: ubuntu-24.04-arm
+            install: sudo apt-get update && sudo apt-get install -y libmbedtls-dev
+          - runner: macos-15
+            install: brew install mbedtls
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/checkout@v7
+        with:
+          repository: maelys-dev/maelys-system
+          ref: c1fa1d4ebf1a33f084239d55af565150d5e51e13
+          path: maelys-system
+      - run: ${{ matrix.install }}
+      - run: make -C maelys-system clean check CC=clang CXX=clang++
+      - name: Verify source, install and physical TLS lifecycle
+        run: |
+          make clean check install-check check-system-pin \
+            CC=clang CXX=clang++ SYSTEM_DIR=maelys-system
+          make tls-integration REQUIRE_MBEDTLS=1 \
+            CC=clang CXX=clang++ SYSTEM_DIR=maelys-system
+      - run: test "$GITHUB_REF_NAME" = "v$(cat VERSION)"
+
+  publish:
+    needs: verify
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Build deterministic source package
+        run: |
+          version=$(cat VERSION)
+          test "$GITHUB_REF_NAME" = "v$version"
+          ./scripts/package-release.sh "$version"
+          make package-homebrew
+          sha256sum "dist/maelys-http-$version.tar.gz" >dist/SHA256SUMS
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            dist/maelys-http-*.tar.gz dist/maelys-http-*.tar.gz.sha256 \
+            dist/SHA256SUMS dist/homebrew/maelys-http.rb \
+            --verify-tag --generate-notes --title "Maelys HTTP $GITHUB_REF_NAME"

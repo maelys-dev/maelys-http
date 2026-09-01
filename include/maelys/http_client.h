@@ -88,6 +88,8 @@ typedef struct maelys_http_client_limits {
     size_t max_progress_steps_per_advance;
     uint64_t max_wait_slice_ms;
     uint64_t max_request_body_bytes;
+    size_t max_connection_reuses;
+    uint64_t idle_connection_ttl_ms;
 } maelys_http_client_limits_t;
 
 void maelys_http_client_limits_default(
@@ -162,6 +164,28 @@ maelys_http_result_t maelys_http_client_create(
     const maelys_http_client_limits_t *limits,
     maelys_http_client_t **out_client);
 void maelys_http_client_release(maelys_http_client_t *client);
+
+/*
+ * Connection reuse is opt-in; by default every request carries
+ * Connection: close and each exchange closes its connection. When enabled,
+ * requests omit that header and a completed exchange may park at most ONE
+ * idle connection on the client handle — a slot, not a pool. The reuse key
+ * is the scheme plus the canonical authority (host lowercased, explicit
+ * port normalized) over the client's single immutable transport, which
+ * carries the TLS identity. Ownership of the parked stream moves out of the
+ * slot before an exchange may use it, so two exchanges can never share a
+ * connection. A connection is destroyed instead of parked unless the
+ * response completed with self-delimiting framing (Content-Length or
+ * chunked; never to-EOF), its Connection list does not name close, and no
+ * bytes remain beyond the framed response; error, timeout, cancellation,
+ * redirect and abandonment paths always destroy. A parked connection is
+ * destroyed at the next attempt when the key mismatches, idle_connection_ttl_ms
+ * elapsed, max_connection_reuses is exhausted, or the idle stream is no
+ * longer quiet (readable bytes, EOF — including a TLS closure without
+ * close_notify — or failure). Disabling destroys any parked connection.
+ */
+maelys_http_result_t maelys_http_client_set_connection_reuse(
+    maelys_http_client_t *client, int enabled);
 
 maelys_http_result_t maelys_http_request_config_create(
     const char *method,

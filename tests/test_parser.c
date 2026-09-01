@@ -213,6 +213,18 @@ static int test_responses_without_message_body(void) {
                                       &consumed) == MAELYS_HTTP_ERR_SYNTAX);
         maelys_http_parser_release(parser);
     }
+    {
+        static const char obs_fold_response[] =
+            "HTTP/1.1 200 OK\r\nX: y\r\n folded\r\n\r\n";
+        maelys_http_parser_t *parser = NULL;
+        size_t consumed = 0u;
+        CHECK(maelys_http_parser_create(MAELYS_HTTP_PARSE_RESPONSE, NULL,
+                                        NULL, NULL, &parser) == MAELYS_HTTP_OK);
+        CHECK(maelys_http_parser_feed(parser, obs_fold_response,
+                                      sizeof(obs_fold_response) - 1u,
+                                      &consumed) == MAELYS_HTTP_ERR_SYNTAX);
+        maelys_http_parser_release(parser);
+    }
     return 0;
 }
 

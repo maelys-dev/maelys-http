@@ -21,6 +21,11 @@
 - A parser error is sticky; untrusted bytes are never scanned for a new start.
 - Client deadlines use an absolute monotonic deadline.
 - Cancellation closes the underlying exchange idempotently.
+- Connection reuse is disabled by default. When explicitly enabled, the client
+  retains at most one idle connection and only after a fully consumed,
+  self-delimiting response with no `close` token or buffered excess bytes.
+  Reuse count and idle lifetime are bounded; an expired, non-quiet or
+  differently keyed connection is destroyed before the next request is sent.
 - Redirects require an application decision. `Authorization`, `Cookie`, and
   `Proxy-Authorization` are stripped whenever scheme or authority changes.
 - The shipped Mbed TLS provider requires an explicit trust anchor, TLS 1.2 or

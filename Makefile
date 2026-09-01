@@ -1,6 +1,6 @@
 SHELL := /bin/sh
 
-VERSION := 0.1.0-dev
+VERSION := $(shell sed -n '1p' VERSION)
 ABI_VERSION := 1
 CC ?= cc
 CXX ?= c++
@@ -25,13 +25,14 @@ BUILD := build
 CORE_OBJECTS := $(BUILD)/common.o $(BUILD)/parser.o $(BUILD)/message.o $(BUILD)/tls.o
 CLIENT_OBJECTS := $(BUILD)/client.o $(BUILD)/resolver.o \
 	$(BUILD)/resolver_posix.o $(BUILD)/transport_posix.o
-TEST_BINS := $(BUILD)/test_parser $(BUILD)/test_message $(BUILD)/test_client \
+TEST_BINS := $(BUILD)/test_parser $(BUILD)/test_conformance $(BUILD)/test_message \
+	$(BUILD)/test_client \
 	$(BUILD)/test_transport_posix $(BUILD)/test_resolver_internal \
 	$(BUILD)/test_tls_provider $(BUILD)/header_cpp
 
-.PHONY: all clean check test sanitizers tsan fuzzers fuzz-libfuzzer install uninstall \
-	check-system-pin install-check package check-mbedtls tls-integration \
-	install-mbedtls
+.PHONY: all clean check check-version test sanitizers tsan fuzzers \
+	fuzz-libfuzzer install uninstall check-system-pin install-check package \
+	package-homebrew check-mbedtls tls-integration install-mbedtls
 
 all: $(BUILD)/libmaelys_http.a $(BUILD)/libmaelys_http_client.a
 
@@ -61,6 +62,9 @@ $(BUILD)/libmaelys_http_client.a: $(CLIENT_OBJECTS)
 	$(RANLIB) $@
 
 $(BUILD)/test_parser: tests/test_parser.c $(BUILD)/libmaelys_http.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libmaelys_http.a -o $@
+
+$(BUILD)/test_conformance: tests/test_conformance.c $(BUILD)/libmaelys_http.a
 	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libmaelys_http.a -o $@
 
 $(BUILD)/test_message: tests/test_message.c $(BUILD)/libmaelys_http.a
@@ -93,6 +97,7 @@ $(SYSTEM_LIB):
 
 test: $(TEST_BINS)
 	$(BUILD)/test_parser
+	$(BUILD)/test_conformance conformance/response-wire-cases.txt
 	$(BUILD)/test_message
 	$(BUILD)/test_client
 	$(BUILD)/test_transport_posix
@@ -100,7 +105,13 @@ test: $(TEST_BINS)
 	$(BUILD)/test_tls_provider
 	$(BUILD)/header_cpp
 
-check: test fuzzers
+check-version:
+	@test "$(VERSION)" = "$$(sed -n 's/^#define MAELYS_HTTP_VERSION_MAJOR \([0-9][0-9]*\)u/\1/p' include/maelys/http.h).$$(sed -n 's/^#define MAELYS_HTTP_VERSION_MINOR \([0-9][0-9]*\)u/\1/p' include/maelys/http.h).$$(sed -n 's/^#define MAELYS_HTTP_VERSION_PATCH \([0-9][0-9]*\)u/\1/p' include/maelys/http.h)" || \
+		{ echo 'VERSION and public header disagree' >&2; exit 1; }
+	@grep -Fq "## $(VERSION) - " CHANGELOG.md || \
+		{ echo 'CHANGELOG has no entry for $(VERSION)' >&2; exit 1; }
+
+check: check-version test fuzzers
 	./scripts/audit-boundaries.sh
 	./scripts/audit-symbols.sh
 	./scripts/audit-whitespace.sh
@@ -134,6 +145,13 @@ sanitizers: $(SYSTEM_LIB)
 		-o $(BUILD)/san/test_parser
 	@if [ "$$(uname -s)" = Darwin ]; then leaks=0; else leaks=1; fi; \
 		ASAN_OPTIONS=detect_leaks=$$leaks $(BUILD)/san/test_parser
+	$(CC) $(CPPFLAGS) -std=c11 -D_POSIX_C_SOURCE=200809L -O1 -g \
+		-fno-omit-frame-pointer -fsanitize=address,undefined \
+		src/common.c src/parser.c src/message.c tests/test_conformance.c \
+		-o $(BUILD)/san/test_conformance
+	@if [ "$$(uname -s)" = Darwin ]; then leaks=0; else leaks=1; fi; \
+		ASAN_OPTIONS=detect_leaks=$$leaks $(BUILD)/san/test_conformance \
+			conformance/response-wire-cases.txt
 	$(CC) $(CPPFLAGS) -std=c11 -D_POSIX_C_SOURCE=200809L -O1 -g \
 		-fno-omit-frame-pointer -fsanitize=address,undefined \
 		src/common.c src/parser.c src/message.c tests/test_message.c \
@@ -268,6 +286,9 @@ install-check: all
 
 package: check
 	./scripts/package-release.sh $(VERSION)
+
+package-homebrew:
+	./scripts/render-homebrew-formula.sh
 
 clean:
 	rm -rf $(BUILD) dist

@@ -18,6 +18,11 @@ typedef enum exchange_state {
 struct maelys_http_client {
     maelys_http_transport_t *transport;
     maelys_http_client_limits_t limits;
+    int reuse_enabled;
+    void *idle_stream;
+    char *idle_key;
+    size_t idle_reuse_count;
+    uint64_t idle_expiry_ms;
 };
 
 struct maelys_http_request {
@@ -58,6 +63,8 @@ struct maelys_http_exchange {
     uint64_t request_body_sent;
     size_t redirect_count;
     size_t informational_count;
+    size_t connection_reuses;
+    int reuse_mode;
     int cancelled;
     int sink_paused;
     int upload_probe_due;
@@ -91,6 +98,8 @@ void maelys_http_client_limits_default(maelys_http_client_limits_t *limits) {
     limits->max_progress_steps_per_advance = 64u;
     limits->max_wait_slice_ms = 50u;
     limits->max_request_body_bytes = UINT64_C(64) * 1024u * 1024u;
+    limits->max_connection_reuses = 64u;
+    limits->idle_connection_ttl_ms = 30000u;
 }
 
 maelys_http_result_t maelys_http_transport_create(
@@ -155,7 +164,11 @@ maelys_http_result_t maelys_http_client_create(
         !limits->max_progress_steps_per_advance ||
         limits->max_progress_steps_per_advance > 65536u ||
         !limits->max_wait_slice_ms || limits->max_wait_slice_ms > 60000u ||
-        !limits->max_request_body_bytes) {
+        !limits->max_request_body_bytes ||
+        !limits->max_connection_reuses ||
+        limits->max_connection_reuses > 65536u ||
+        !limits->idle_connection_ttl_ms ||
+        limits->idle_connection_ttl_ms > 3600000u) {
         return MAELYS_HTTP_ERR_ARGUMENT;
     }
     client = calloc(1u, sizeof(*client));
@@ -167,10 +180,83 @@ maelys_http_result_t maelys_http_client_create(
     return MAELYS_HTTP_OK;
 }
 
+static void discard_idle_connection(maelys_http_client_t *client) {
+    if (!client->idle_stream) return;
+    client->transport->ops.close(client->transport->context,
+                                 client->idle_stream);
+    client->transport->ops.stream_release(client->transport->context,
+                                          client->idle_stream);
+    client->idle_stream = NULL;
+    free(client->idle_key);
+    client->idle_key = NULL;
+    client->idle_reuse_count = 0u;
+    client->idle_expiry_ms = 0u;
+}
+
+maelys_http_result_t maelys_http_client_set_connection_reuse(
+    maelys_http_client_t *client, int enabled) {
+    if (!client || (enabled != 0 && enabled != 1)) return MAELYS_HTTP_ERR_ARGUMENT;
+    client->reuse_enabled = enabled;
+    if (!enabled) discard_idle_connection(client);
+    return MAELYS_HTTP_OK;
+}
+
 void maelys_http_client_release(maelys_http_client_t *client) {
     if (!client) return;
+    discard_idle_connection(client);
     maelys_http_transport_release(client->transport);
     free(client);
+}
+
+/* Builds "scheme://host:port" with the host lowercased and the port made
+ * explicit and numeric, so "HTTPS://Example.COM" and "https://example.com:443"
+ * park interchangeably. scheme and authority were already validated. */
+static char *make_reuse_key(const char *scheme, const char *authority) {
+    size_t scheme_length = strlen(scheme);
+    size_t authority_length = strlen(authority);
+    size_t host_length = authority_length;
+    size_t port_start = 0u;
+    unsigned port = 0u;
+    size_t index;
+    char *key;
+    int count;
+    if (authority[0] == '[') {
+        const char *closing = memchr(authority, ']', authority_length);
+        size_t closing_index = (size_t)(closing - authority);
+        if (closing_index + 1u < authority_length &&
+            authority[closing_index + 1u] == ':') {
+            host_length = closing_index + 1u;
+            port_start = closing_index + 2u;
+        }
+    } else {
+        const char *colon = memchr(authority, ':', authority_length);
+        if (colon) {
+            host_length = (size_t)(colon - authority);
+            port_start = host_length + 1u;
+        }
+    }
+    if (port_start) {
+        for (index = port_start; index < authority_length; ++index) {
+            port = port * 10u + (unsigned)(authority[index] - '0');
+        }
+    } else {
+        port = maelys_http_internal_ascii_equal(scheme, scheme_length,
+                                                "http") ? 80u : 443u;
+    }
+    key = malloc(scheme_length + 3u + host_length + 7u);
+    if (!key) return NULL;
+    memcpy(key, scheme, scheme_length);
+    memcpy(key + scheme_length, "://", 3u);
+    for (index = 0u; index < host_length; ++index) {
+        key[scheme_length + 3u + index] =
+            (char)maelys_http_internal_ascii_lower((unsigned char)authority[index]);
+    }
+    count = snprintf(key + scheme_length + 3u + host_length, 7u, ":%u", port);
+    if (count < 2 || count >= 7) {
+        free(key);
+        return NULL;
+    }
+    return key;
 }
 
 maelys_http_result_t maelys_http_request_config_create(
@@ -364,10 +450,12 @@ static maelys_http_result_t account_request_header(
 }
 
 /* Apply the parser's exact wire limits symmetrically to the outgoing head.
- * This runs before any transport open or unbounded serialization buffer. */
+ * This runs before any transport open or unbounded serialization buffer.
+ * reuse_mode omits the Connection: close line from the head and the budget. */
 static maelys_http_result_t validate_request_head(
     const maelys_http_request_t *request,
-    const maelys_http_limits_t *limits) {
+    const maelys_http_limits_t *limits,
+    int reuse_mode) {
     char content_length[32];
     size_t start_line_bytes = strlen(request->method);
     size_t header_count = request->header_count;
@@ -386,7 +474,8 @@ static maelys_http_result_t validate_request_head(
         start_line_bytes > limits->max_start_line_bytes) {
         return MAELYS_HTTP_ERR_LIMIT;
     }
-    result = checked_add_size(&header_count, 2u); /* Host + Connection */
+    result = checked_add_size(&header_count,
+                              reuse_mode ? 1u : 2u); /* Host (+ Connection) */
     if (result == MAELYS_HTTP_OK && request->body_mode) {
         result = checked_add_size(&header_count, 1u);
     }
@@ -395,7 +484,7 @@ static maelys_http_result_t validate_request_head(
     }
     result = account_request_header(
         limits, "Host", request->authority, &header_bytes);
-    if (result == MAELYS_HTTP_OK) {
+    if (result == MAELYS_HTTP_OK && !reuse_mode) {
         result = account_request_header(
             limits, "Connection", "close", &header_bytes);
     }
@@ -456,7 +545,7 @@ static maelys_http_result_t prepare_head(maelys_http_exchange_t *exchange) {
         result = maelys_http_message_add_header(message, "Host",
                                                 exchange->request.authority);
     }
-    if (result == MAELYS_HTTP_OK) {
+    if (result == MAELYS_HTTP_OK && !exchange->reuse_mode) {
         result = maelys_http_message_add_header(message, "Connection", "close");
     }
     for (index = 0; result == MAELYS_HTTP_OK &&
@@ -497,6 +586,123 @@ static maelys_http_result_t response_body(
     return MAELYS_HTTP_ERR_IO;
 }
 
+/* Return 1 when any response Connection header lists the close token. */
+static int connection_names_close(const maelys_http_parser_t *parser) {
+    size_t index;
+    for (index = 0u; index < maelys_http_parser_header_count(parser); ++index) {
+        maelys_http_header_view_t header =
+            maelys_http_parser_header(parser, index);
+        const char *value;
+        size_t remaining;
+        if (!maelys_http_internal_ascii_equal(header.name.data,
+                                              header.name.length,
+                                              "connection")) continue;
+        value = header.value.data;
+        remaining = header.value.length;
+        while (remaining) {
+            size_t token_length = 0u;
+            if (*value == ' ' || *value == '\t' || *value == ',') {
+                ++value;
+                --remaining;
+                continue;
+            }
+            while (token_length < remaining && value[token_length] != ',' &&
+                   value[token_length] != ' ' &&
+                   value[token_length] != '\t') ++token_length;
+            if (maelys_http_internal_ascii_equal(value, token_length,
+                                                 "close")) return 1;
+            value += token_length;
+            remaining -= token_length;
+        }
+    }
+    return 0;
+}
+
+static int response_is_reusable(const maelys_http_exchange_t *exchange) {
+    if (!exchange->reuse_mode || exchange->cancelled) return 0;
+    if (maelys_http_parser_result(exchange->parser) != MAELYS_HTTP_COMPLETE) {
+        return 0;
+    }
+    /* An EOF-delimited response consumes the connection by definition. */
+    if (maelys_http_parser_body_framing(exchange->parser) ==
+        MAELYS_HTTP_BODY_UNTIL_EOF) return 0;
+    /* Buffered bytes beyond the framed response are a protocol violation. */
+    if (exchange->incoming.offset != exchange->incoming.length) return 0;
+    return !connection_names_close(exchange->parser);
+}
+
+/* Park the stream as the client's single idle connection, or close it. Only
+ * the fully-framed completion path with the request fully sent calls this;
+ * every error, timeout, cancellation, redirect, upgrade-refusal and
+ * abandonment path closes the stream instead of parking it. */
+static void park_or_close_stream(maelys_http_exchange_t *exchange) {
+    maelys_http_client_t *client = exchange->client;
+    if (client->reuse_enabled && !client->idle_stream &&
+        response_is_reusable(exchange)) {
+        uint64_t expiry = 0u;
+        char *key = make_reuse_key(exchange->request.scheme,
+                                   exchange->request.authority);
+        if (key && maelys_sys_deadline_after(
+                client->limits.idle_connection_ttl_ms,
+                &expiry) == MAELYS_SYS_OK) {
+            client->idle_stream = exchange->stream;
+            client->idle_key = key;
+            client->idle_reuse_count = exchange->connection_reuses;
+            client->idle_expiry_ms = expiry;
+            exchange->stream = NULL;
+            return;
+        }
+        free(key);
+    }
+    client->transport->ops.close(client->transport->context, exchange->stream);
+}
+
+/* Move the parked connection into the exchange when its key, TTL and reuse
+ * budget allow; otherwise destroy it so the caller dials fresh. The key
+ * covers scheme and canonical authority; the TLS identity travels with the
+ * client's single immutable transport. Taking empties the slot, so a second
+ * exchange can never share the connection. */
+static maelys_http_result_t take_idle_stream(maelys_http_exchange_t *exchange) {
+    maelys_http_client_t *client = exchange->client;
+    int expired = 0;
+    int usable;
+    char *key;
+    exchange->connection_reuses = 0u;
+    if (!exchange->reuse_mode || !client->idle_stream) return MAELYS_HTTP_OK;
+    key = make_reuse_key(exchange->request.scheme,
+                         exchange->request.authority);
+    if (!key) return MAELYS_HTTP_ERR_MEMORY;
+    usable = strcmp(key, client->idle_key) == 0 &&
+        client->idle_reuse_count < client->limits.max_connection_reuses &&
+        maelys_sys_deadline_expired(client->idle_expiry_ms,
+                                    &expired) == MAELYS_SYS_OK && !expired;
+    if (usable) {
+        /* An idle connection must be quiet: a readable byte is a protocol
+         * violation and EOF or failure — including a TLS closure without
+         * close_notify — is a dead connection. */
+        unsigned char probe;
+        size_t received = 0u;
+        maelys_http_io_step_t step = client->transport->ops.read(
+            client->transport->context, client->idle_stream, &probe, 1u,
+            &received);
+        usable = step == MAELYS_HTTP_IO_WANT_READ ||
+                 step == MAELYS_HTTP_IO_WANT_WRITE;
+    }
+    free(key);
+    if (!usable) {
+        discard_idle_connection(client);
+        return MAELYS_HTTP_OK;
+    }
+    exchange->stream = client->idle_stream;
+    exchange->connection_reuses = client->idle_reuse_count + 1u;
+    client->idle_stream = NULL;
+    free(client->idle_key);
+    client->idle_key = NULL;
+    client->idle_reuse_count = 0u;
+    client->idle_expiry_ms = 0u;
+    return MAELYS_HTTP_OK;
+}
+
 maelys_http_result_t maelys_http_exchange_create(
     maelys_http_client_t *client, const maelys_http_request_t *request,
     uint64_t deadline_ms, maelys_http_exchange_t **out_exchange) {
@@ -504,11 +710,13 @@ maelys_http_result_t maelys_http_exchange_create(
     maelys_http_result_t result;
     if (out_exchange) *out_exchange = NULL;
     if (!client || !request || !out_exchange) return MAELYS_HTTP_ERR_ARGUMENT;
-    result = validate_request_head(request, &client->limits.parser);
+    result = validate_request_head(request, &client->limits.parser,
+                                   client->reuse_enabled);
     if (result != MAELYS_HTTP_OK) return result;
     exchange = calloc(1u, sizeof(*exchange));
     if (!exchange) return MAELYS_HTTP_ERR_MEMORY;
     exchange->client = client;
+    exchange->reuse_mode = client->reuse_enabled;
     exchange->deadline_ms = deadline_ms;
     result = copy_request(&exchange->request, request);
     if (result == MAELYS_HTTP_OK) {
@@ -1070,28 +1278,33 @@ maelys_http_result_t maelys_http_exchange_advance(maelys_http_exchange_t *exchan
         if (exchange->state == EXCHANGE_OPEN) {
             char *open_error = NULL;
             result = validate_request_head(
-                &exchange->request, &exchange->client->limits.parser);
+                &exchange->request, &exchange->client->limits.parser,
+                exchange->reuse_mode);
             if (result != MAELYS_HTTP_OK) {
                 return exchange_fail(exchange, result, NULL);
             }
             result = take_operation(exchange, &operations);
             if (result == MAELYS_HTTP_AGAIN) return result;
             if (result != MAELYS_HTTP_OK) return exchange_fail(exchange, result, NULL);
-            result = exchange->client->transport->ops.open(
-                exchange->client->transport->context, exchange->request.scheme,
-                exchange->request.authority, exchange->deadline_ms,
-                &exchange->stream, &open_error);
-            if (result == MAELYS_HTTP_AGAIN || result == MAELYS_HTTP_COMPLETE) {
-                result = MAELYS_HTTP_ERR_STATE;
-            }
-            if (result != MAELYS_HTTP_OK || !exchange->stream) {
-                result = exchange_fail(exchange,
-                    result == MAELYS_HTTP_OK ? MAELYS_HTTP_ERR_IO : result,
-                    open_error ? open_error : "transport open failed");
+            result = take_idle_stream(exchange);
+            if (result != MAELYS_HTTP_OK) return exchange_fail(exchange, result, NULL);
+            if (!exchange->stream) {
+                result = exchange->client->transport->ops.open(
+                    exchange->client->transport->context, exchange->request.scheme,
+                    exchange->request.authority, exchange->deadline_ms,
+                    &exchange->stream, &open_error);
+                if (result == MAELYS_HTTP_AGAIN || result == MAELYS_HTTP_COMPLETE) {
+                    result = MAELYS_HTTP_ERR_STATE;
+                }
+                if (result != MAELYS_HTTP_OK || !exchange->stream) {
+                    result = exchange_fail(exchange,
+                        result == MAELYS_HTTP_OK ? MAELYS_HTTP_ERR_IO : result,
+                        open_error ? open_error : "transport open failed");
+                    free(open_error);
+                    return result;
+                }
                 free(open_error);
-                return result;
             }
-            free(open_error);
             result = prepare_head(exchange);
             if (result != MAELYS_HTTP_OK) return exchange_fail(exchange, result, NULL);
             exchange->state = EXCHANGE_SEND_HEAD;
@@ -1109,6 +1322,8 @@ maelys_http_result_t maelys_http_exchange_advance(maelys_http_exchange_t *exchan
                 if (!operations) return MAELYS_HTTP_AGAIN;
                 result = read_response(exchange, &operations, 0);
                 if (result == MAELYS_HTTP_COMPLETE) {
+                    /* Early final response: the request body was cut short,
+                     * so this connection is closed, never parked. */
                     exchange->state = EXCHANGE_DONE;
                     exchange->client->transport->ops.close(
                         exchange->client->transport->context, exchange->stream);
@@ -1174,8 +1389,7 @@ maelys_http_result_t maelys_http_exchange_advance(maelys_http_exchange_t *exchan
                 return exchange_fail(exchange, result, message);
             }
             exchange->state = EXCHANGE_DONE;
-            exchange->client->transport->ops.close(
-                exchange->client->transport->context, exchange->stream);
+            park_or_close_stream(exchange);
             return MAELYS_HTTP_COMPLETE;
         }
     }

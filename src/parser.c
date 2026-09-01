@@ -272,6 +272,7 @@ static maelys_http_result_t parse_header_line(
     size_t name_length;
     size_t value_length;
     if (parser->line_length == 0u) return MAELYS_HTTP_COMPLETE;
+    /* Refuse obs-fold: a header line must never start with SP or HTAB. */
     if (parser->line[0] == ' ' || parser->line[0] == '\t') {
         return fail(parser, MAELYS_HTTP_ERR_SYNTAX);
     }

@@ -1,0 +1,335 @@
+# Adversarial wire conformance corpus for host/http_parser.c
+#
+# Run by tests/test_http_conformance.c (the Makefile passes this file's path).
+# Every vector is the EXACT byte sequence a client puts on the socket, spelled
+# with escapes so no literal CR, LF or NUL ever appears in this file and no
+# editor or git CRLF rule can silently rewrite a vector.
+#
+# Each case is three lines, in order, blank-line separated:
+#   name:   <the rule or property this vector exercises>
+#   expect: accept cl=<n> | accept nocl | reject <REASON> | incomplete
+#   wire:   <escaped request bytes>
+# REASON is one of BAD_REQUEST, SMUGGLING, HEADERS_TOO_LARGE, VERSION.
+# Escapes in wire: \r \n \t \0 \\ and \xHH. Everything else is literal.
+# A leading space or tab in a vector is written \x20 / \t so the "wire: "
+# separator stays unambiguous.
+#
+# These are PARSER verdicts, not server verdicts: the parser validates framing,
+# the request line and the header grammar only. It does not check the method,
+# the Host value, Content-Type, Accept or Origin, so several vectors below the
+# parser ACCEPTS are ones the server layer would still refuse (a GET, a bad
+# Host). That boundary is the point of testing the parser in isolation.
+
+# ============================================================ acceptance
+name: a well-formed POST is accepted
+expect: accept cl=2
+wire: POST /mcp HTTP/1.1\r\nHost: 127.0.0.1:8080\r\nContent-Type: application/json\r\nAccept: application/json, text/event-stream\r\nContent-Length: 2\r\n\r\n{}
+
+name: a minimal Host-only POST with an empty body is accepted
+expect: accept cl=0
+wire: POST /mcp HTTP/1.1\r\nHost: x\r\nContent-Length: 0\r\n\r\n
+
+name: an absent Content-Length parses; framing is simply "none"
+expect: accept nocl
+wire: POST /mcp HTTP/1.1\r\nHost: x\r\n\r\n
+
+name: a GET is accepted by the PARSER; the 405 is the server layer's
+expect: accept nocl
+wire: GET /mcp HTTP/1.1\r\nHost: x\r\n\r\n
+
+name: a Content-Length with leading zeroes is 1*DIGIT and is accepted
+expect: accept cl=7
+wire: POST /mcp HTTP/1.1\r\nHost: x\r\nContent-Length: 007\r\n\r\n
+
+name: Content-Length wrapped in HTAB OWS is trimmed and accepted
+expect: accept cl=2
+wire: POST /mcp HTTP/1.1\r\nHost: x\r\nContent-Length:\t2\t\r\n\r\n{}
+
+name: Content-Length-Extra is not Content-Length, so no framing is set
+expect: accept nocl
+wire: POST /mcp HTTP/1.1\r\nHost: x\r\nContent-Length-Extra: 9\r\n\r\n
+
+name: Transfer-Encoding-Foo is not Transfer-Encoding and does not desync
+expect: accept cl=2
+wire: POST /mcp HTTP/1.1\r\nHost: x\r\nTransfer-Encoding-Foo: chunked\r\nContent-Length: 2\r\n\r\n{}
+
+name: a repeated Mcp-Param-* is forwarded-and-ignored, not refused
+expect: accept cl=2
+wire: POST /mcp HTTP/1.1\r\nHost: x\r\nMcp-Param-Foo: a\r\nMcp-Param-Foo: b\r\nContent-Length: 2\r\n\r\n{}
+
+name: colons inside a header value belong to the value, not a second split
+expect: accept nocl
+wire: POST /mcp HTTP/1.1\r\nHost: x\r\nX-Trace: a:b:c\r\n\r\n
+
+name: a HTAB inside a header value is legal and kept
+expect: accept nocl
+wire: POST /mcp HTTP/1.1\r\nHost: x\r\nX-Note:\tv\ta\tb\r\n\r\n
+
+name: high bytes in a value are not controls and are accepted
+expect: accept nocl
+wire: POST /mcp HTTP/1.1\r\nHost: x\r\nX-Bin: \xff\xfe\x80\r\n\r\n
+
+name: the first of two pipelined requests completes with its own length
+expect: accept cl=2
+wire: POST /mcp HTTP/1.1\r\nHost: x\r\nContent-Length: 2\r\n\r\n{}POST /mcp HTTP/1.1\r\nHost: x\r\nContent-Length: 2\r\n\r\n{}
+
+# ================================================ the smuggling class (TE + CL)
+name: Transfer-Encoding then Content-Length is smuggling
+expect: reject SMUGGLING
+wire: POST /mcp HTTP/1.1\r\nHost: x\r\nTransfer-Encoding: chunked\r\nContent-Length: 2\r\n\r\n{}
+
+name: Content-Length then Transfer-Encoding is smuggling in either order
+expect: reject SMUGGLING
+wire: POST /mcp HTTP/1.1\r\nHost: x\r\nContent-Length: 2\r\nTransfer-Encoding: identity\r\n\r\n{}
+
+name: case-obfuscated Transfer-Encoding with Content-Length is still smuggling
+expect: reject SMUGGLING
+wire: POST /mcp HTTP/1.1\r\nHost: x\r\nTrAnSfEr-EnCoDiNg: chunked\r\nContent-Length: 2\r\n\r\n{}
+
+name: a HTAB-led Transfer-Encoding value with Content-Length is smuggling
+expect: reject SMUGGLING
+wire: POST /mcp HTTP/1.1\r\nHost: x\r\nTransfer-Encoding:\tchunked\r\nContent-Length: 2\r\n\r\n{}
+
+# ============================================== the Transfer-Encoding blanket ban
+name: Transfer-Encoding present at all is refused
+expect: reject BAD_REQUEST
+wire: POST /mcp HTTP/1.1\r\nHost: x\r\nTransfer-Encoding: chunked\r\n\r\n
+
+name: Transfer-Encoding: identity is refused too
+expect: reject BAD_REQUEST
+wire: POST /mcp HTTP/1.1\r\nHost: x\r\nTransfer-Encoding: identity\r\n\r\n
+
+name: an EMPTY Transfer-Encoding value is still the header being present
+expect: reject BAD_REQUEST
+wire: POST /mcp HTTP/1.1\r\nHost: x\r\nTransfer-Encoding:\r\n\r\n
+
+name: a whitespace-only Transfer-Encoding value is still present
+expect: reject BAD_REQUEST
+wire: POST /mcp HTTP/1.1\r\nHost: x\r\nTransfer-Encoding: \t \r\n\r\n
+
+name: Transfer-Encoding as a chunked,chunked list is refused
+expect: reject BAD_REQUEST
+wire: POST /mcp HTTP/1.1\r\nHost: x\r\nTransfer-Encoding: chunked, chunked\r\n\r\n
+
+name: Transfer-Encoding as a gzip,chunked list is refused
+expect: reject BAD_REQUEST
+wire: POST /mcp HTTP/1.1\r\nHost: x\r\nTransfer-Encoding: gzip, chunked\r\n\r\n
+
+name: a repeated Transfer-Encoding is refused as a duplicate
+expect: reject BAD_REQUEST
+wire: POST /mcp HTTP/1.1\r\nHost: x\r\nTransfer-Encoding: chunked\r\nTransfer-Encoding: identity\r\n\r\n
+
+# ================================================== Content-Length grammar
+name: a repeated Content-Length is refused even when the values agree
+expect: reject BAD_REQUEST
+wire: POST /mcp HTTP/1.1\r\nHost: x\r\nContent-Length: 2\r\nContent-Length: 2\r\n\r\n{}
+
+name: a repeated Content-Length with different values is refused
+expect: reject BAD_REQUEST
+wire: POST /mcp HTTP/1.1\r\nHost: x\r\nContent-Length: 2\r\nContent-Length: 9\r\n\r\n{}
+
+name: a repeated Content-Length in different casing is still a duplicate
+expect: reject BAD_REQUEST
+wire: POST /mcp HTTP/1.1\r\nHost: x\r\nContent-Length: 2\r\ncontent-length: 2\r\n\r\n{}
+
+name: a Content-Length with a leading plus is refused
+expect: reject BAD_REQUEST
+wire: POST /mcp HTTP/1.1\r\nHost: x\r\nContent-Length: +2\r\n\r\n{}
+
+name: a negative Content-Length is refused
+expect: reject BAD_REQUEST
+wire: POST /mcp HTTP/1.1\r\nHost: x\r\nContent-Length: -2\r\n\r\n{}
+
+name: a hex 0x Content-Length is refused
+expect: reject BAD_REQUEST
+wire: POST /mcp HTTP/1.1\r\nHost: x\r\nContent-Length: 0x2\r\n\r\n{}
+
+name: an empty Content-Length is refused
+expect: reject BAD_REQUEST
+wire: POST /mcp HTTP/1.1\r\nHost: x\r\nContent-Length:\r\n\r\n
+
+name: a Content-Length with an embedded space is refused
+expect: reject BAD_REQUEST
+wire: POST /mcp HTTP/1.1\r\nHost: x\r\nContent-Length: 2 2\r\n\r\n{}
+
+name: a Content-Length with an embedded HTAB is refused
+expect: reject BAD_REQUEST
+wire: POST /mcp HTTP/1.1\r\nHost: x\r\nContent-Length: 2\t2\r\n\r\n{}
+
+name: a Content-Length with a trailing non-digit is refused
+expect: reject BAD_REQUEST
+wire: POST /mcp HTTP/1.1\r\nHost: x\r\nContent-Length: 2a\r\n\r\n{}
+
+name: an overflowing Content-Length is refused rather than truncated
+expect: reject BAD_REQUEST
+wire: POST /mcp HTTP/1.1\r\nHost: x\r\nContent-Length: 99999999999999999999999999999\r\n\r\n
+
+# ===================================== bare LF, bare CR, NUL and leading bytes
+name: a bare LF terminating the request line is refused
+expect: reject BAD_REQUEST
+wire: POST /mcp HTTP/1.1\nHost: x\r\n\r\n
+
+name: a bare LF terminating a header is refused
+expect: reject BAD_REQUEST
+wire: POST /mcp HTTP/1.1\r\nHost: x\n\r\n
+
+name: a bare CR inside a header value is refused
+expect: reject BAD_REQUEST
+wire: POST /mcp HTTP/1.1\r\nHost: 127\r0.1\r\n\r\n
+
+name: a NUL in a header value is refused before the value is interpreted
+expect: reject BAD_REQUEST
+wire: POST /mcp HTTP/1.1\r\nHost: 127.0.0\x00.1\r\n\r\n
+
+name: a NUL in the request target is refused
+expect: reject BAD_REQUEST
+wire: POST /m\x00cp HTTP/1.1\r\nHost: x\r\n\r\n
+
+name: a control byte in the request target is refused
+expect: reject BAD_REQUEST
+wire: POST /m\x01cp HTTP/1.1\r\nHost: x\r\n\r\n
+
+name: a leading space before the request line is refused
+expect: reject BAD_REQUEST
+wire: \x20POST /mcp HTTP/1.1\r\nHost: x\r\n\r\n
+
+name: a leading HTAB before the request line is refused
+expect: reject BAD_REQUEST
+wire: \tPOST /mcp HTTP/1.1\r\nHost: x\r\n\r\n
+
+name: a leading CRLF before the request line is refused
+expect: reject BAD_REQUEST
+wire: \r\nPOST /mcp HTTP/1.1\r\nHost: x\r\n\r\n
+
+# ============================================= obs-fold and header-name grammar
+name: an obs-fold continuation with a leading space is refused
+expect: reject BAD_REQUEST
+wire: POST /mcp HTTP/1.1\r\nHost: x\r\n  folded\r\n\r\n
+
+name: an obs-fold continuation with a leading HTAB is refused
+expect: reject BAD_REQUEST
+wire: POST /mcp HTTP/1.1\r\nHost: x\r\n\tfolded\r\n\r\n
+
+name: whitespace between a field name and its colon is refused
+expect: reject BAD_REQUEST
+wire: POST /mcp HTTP/1.1\r\nHost : x\r\n\r\n
+
+name: a header name outside tchar is refused
+expect: reject BAD_REQUEST
+wire: POST /mcp HTTP/1.1\r\nH@st: x\r\n\r\n
+
+name: an empty header name is refused
+expect: reject BAD_REQUEST
+wire: POST /mcp HTTP/1.1\r\n: x\r\n\r\n
+
+name: a header line with no colon is refused
+expect: reject BAD_REQUEST
+wire: POST /mcp HTTP/1.1\r\nHost\r\n\r\n
+
+# =================================================== request-line grammar
+name: a method outside tchar is refused
+expect: reject BAD_REQUEST
+wire: PO/ST /mcp HTTP/1.1\r\nHost: x\r\n\r\n
+
+name: a HTAB between method and target folds into a non-tchar method
+expect: reject BAD_REQUEST
+wire: POST\t/mcp HTTP/1.1\r\nHost: x\r\n\r\n
+
+name: an empty request target is refused
+expect: reject BAD_REQUEST
+wire: POST  HTTP/1.1\r\nHost: x\r\n\r\n
+
+name: a double space collapsing the target is refused
+expect: reject BAD_REQUEST
+wire: POST  /mcp HTTP/1.1\r\nHost: x\r\n\r\n
+
+# ============================================================= versions
+name: HTTP/1.0 is refused rather than downgraded to
+expect: reject VERSION
+wire: POST /mcp HTTP/1.0\r\nHost: x\r\n\r\n
+
+name: HTTP/2.0 over this listener is refused
+expect: reject VERSION
+wire: POST /mcp HTTP/2.0\r\nHost: x\r\n\r\n
+
+name: an HTTP/0.9 two-token request line is a version refusal
+expect: reject VERSION
+wire: POST /mcp\r\nHost: x\r\n\r\n
+
+name: a trailing space makes the version token HTTP/1.1-with-space, a 505
+expect: reject VERSION
+wire: POST /mcp HTTP/1.1 \r\nHost: x\r\n\r\n
+
+name: an HTTP/1.11 version is not HTTP/1.1 and is a 505
+expect: reject VERSION
+wire: POST /mcp HTTP/1.11\r\nHost: x\r\n\r\n
+
+name: a lowercase http/1.1 is case-sensitive and is a malformed line, not 505
+expect: reject BAD_REQUEST
+wire: POST /mcp http/1.1\r\nHost: x\r\n\r\n
+
+name: a version that is not HTTP at all is a malformed request line
+expect: reject BAD_REQUEST
+wire: POST /mcp SPDY/3.1\r\nHost: x\r\n\r\n
+
+name: a near-miss HXTP/1.1 scheme is a malformed request line
+expect: reject BAD_REQUEST
+wire: POST /mcp HXTP/1.1\r\nHost: x\r\n\r\n
+
+# =================================================== duplicate protocol headers
+name: a repeated Host is refused
+expect: reject BAD_REQUEST
+wire: POST /mcp HTTP/1.1\r\nHost: a\r\nHost: b\r\n\r\n
+
+name: a repeated Content-Type is refused
+expect: reject BAD_REQUEST
+wire: POST /mcp HTTP/1.1\r\nHost: x\r\nContent-Type: application/json\r\nContent-Type: application/json\r\n\r\n
+
+name: a repeated Accept is refused
+expect: reject BAD_REQUEST
+wire: POST /mcp HTTP/1.1\r\nHost: x\r\nAccept: */*\r\nAccept: application/json\r\n\r\n
+
+name: a repeated Origin is refused
+expect: reject BAD_REQUEST
+wire: POST /mcp HTTP/1.1\r\nHost: x\r\nOrigin: http://a\r\nOrigin: http://b\r\n\r\n
+
+name: a repeated Authorization is refused
+expect: reject BAD_REQUEST
+wire: POST /mcp HTTP/1.1\r\nHost: x\r\nAuthorization: Bearer a\r\nAuthorization: Bearer b\r\n\r\n
+
+name: a repeated Connection is refused
+expect: reject BAD_REQUEST
+wire: POST /mcp HTTP/1.1\r\nHost: x\r\nConnection: close\r\nConnection: keep-alive\r\n\r\n
+
+name: a repeated Expect is refused
+expect: reject BAD_REQUEST
+wire: POST /mcp HTTP/1.1\r\nHost: x\r\nExpect: 100-continue\r\nExpect: other\r\n\r\n
+
+name: a repeated Mcp-Method is refused
+expect: reject BAD_REQUEST
+wire: POST /mcp HTTP/1.1\r\nHost: x\r\nMcp-Method: tools/call\r\nMcp-Method: tools/list\r\n\r\n
+
+name: a repeated Mcp-Name is refused
+expect: reject BAD_REQUEST
+wire: POST /mcp HTTP/1.1\r\nHost: x\r\nMcp-Name: a\r\nMcp-Name: b\r\n\r\n
+
+name: a repeated MCP-Protocol-Version across casings is refused
+expect: reject BAD_REQUEST
+wire: POST /mcp HTTP/1.1\r\nHost: x\r\nMCP-Protocol-Version: 2026-07-28\r\nmcp-protocol-version: 2025-11-25\r\n\r\n
+
+# ================================================== incomplete, never guessed
+name: a header block with no terminating blank line stays incomplete
+expect: incomplete
+wire: POST /mcp HTTP/1.1\r\nHost: x\r\n
+
+name: a request line with no CRLF yet stays incomplete
+expect: incomplete
+wire: POST /mcp HTTP/1.1
+
+name: a dangling CR awaiting its LF stays incomplete
+expect: incomplete
+wire: POST /mcp HTTP/1.1\r\nHost: x\r\n\r
+
+name: a partial header field stays incomplete
+expect: incomplete
+wire: POST /mcp HTTP/1.1\r\nHos
