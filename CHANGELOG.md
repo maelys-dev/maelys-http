@@ -15,5 +15,7 @@
 - Add a private injectable resolver seam with bounded numeric results and
   strict response identity validation. The default getaddrinfo provider
   advertises no hard deadline or hard-cancellation guarantee.
+- Use direct C11 static initialization for the resolver request counter so
+  strict Xcode 26 builds do not depend on deprecated `ATOMIC_VAR_INIT`.
 
 This development entry is not a release or compatibility promise.

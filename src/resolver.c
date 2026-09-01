@@ -22,7 +22,7 @@ struct maelys_http_resolver_request {
     int taken;
 };
 
-static atomic_uint_fast64_t next_request_id = ATOMIC_VAR_INIT(UINT64_C(1));
+static atomic_uint_fast64_t next_request_id = UINT64_C(1);
 
 static int valid_guarantees(unsigned guarantees) {
     const unsigned known = MAELYS_HTTP_RESOLVER_HARD_DEADLINE |
