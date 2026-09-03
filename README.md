@@ -66,5 +66,6 @@ claiming that hard cancellation exists today. Callers own product decisions.
 
 ## License
 
-Apache License 2.0. The provenance document records the MIT-licensed Maelys
-implementations and corpora studied while designing this independent component.
+Mozilla Public License 2.0 ([LICENSE](LICENSE)), like every Maelys repository.
+The provenance document records the Maelys implementations and corpora studied
+while designing this independent component.

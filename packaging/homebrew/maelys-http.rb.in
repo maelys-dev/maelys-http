@@ -3,7 +3,7 @@ class MaelysHttp < Formula
   homepage "https://github.com/maelys-dev/maelys-http"
   url "https://github.com/maelys-dev/maelys-http/releases/download/v@VERSION@/maelys-http-@VERSION@.tar.gz"
   sha256 "@SHA256@"
-  license "Apache-2.0"
+  license "MPL-2.0"
 
   depends_on "maelys-system"
   depends_on "mbedtls" => :optional

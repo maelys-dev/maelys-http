@@ -1,7 +1,7 @@
 # Provenance
 
-Maelys HTTP is an independent Apache-2.0 implementation informed by two
-MIT-licensed Maelys codebases. It does not link either product and does not
+Maelys HTTP is an independent MPL-2.0 implementation informed by two
+Maelys codebases that were MIT-licensed when studied. It does not link either product and does not
 import their product policy.
 
 ## MCP parser and corpus
