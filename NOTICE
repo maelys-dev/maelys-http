@@ -1,7 +1,9 @@
 Maelys HTTP
 Copyright 2026 Maelys Developers
 
-Architectural provenance and retained MIT notices:
+This Source Code Form is subject to the terms of the Mozilla Public
+License, v. 2.0 (see LICENSE). Architectural provenance and retained MIT
+notices of the codebases studied while designing it:
 
 Maelys MCP HTTP parser and corpus
 Copyright (c) 2026 David Bromberg

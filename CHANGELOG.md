@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.3 - 2026-09-03
+
+### Changed
+
+- Relicense from Apache-2.0 to the Mozilla Public License 2.0, the license
+  of every Maelys repository. No code change.
+
 ## 0.1.2 - 2026-09-01
 
 ### Fixed
