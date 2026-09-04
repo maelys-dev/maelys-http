@@ -267,7 +267,7 @@ maelys_http_result_t maelys_http_request_config_create(
     if (out_request) *out_request = NULL;
     if (!out_request || !method || !method[0] || !strcmp(method, "CONNECT") ||
         !valid_scheme(scheme) ||
-        !valid_authority(authority) ||
+        !valid_authority(authority) || !target ||
         !maelys_http_internal_origin_target_valid(target, strlen(target))) {
         return MAELYS_HTTP_ERR_ARGUMENT;
     }
@@ -618,8 +618,25 @@ static int connection_names_close(const maelys_http_parser_t *parser) {
     return 0;
 }
 
+/* Return 1 once every request octet, head and body, has been handed to the
+ * transport. An early final response ends the upload before that point, and
+ * the peer then still expects the rest of the body on this connection. */
+static int request_fully_sent(const maelys_http_exchange_t *exchange) {
+    if (exchange->outgoing.offset != exchange->outgoing.length) return 0;
+    if (exchange->request.body_mode == 1) {
+        return exchange->request_body_sent == exchange->request.content_length;
+    }
+    if (exchange->request.body_mode == 2) {
+        return exchange->request_body_sent == UINT64_MAX;
+    }
+    return 1;
+}
+
 static int response_is_reusable(const maelys_http_exchange_t *exchange) {
     if (!exchange->reuse_mode || exchange->cancelled) return 0;
+    /* A partially written request leaves the peer mid-body: the next request
+     * head would be consumed as body octets and desynchronize responses. */
+    if (!request_fully_sent(exchange)) return 0;
     if (maelys_http_parser_result(exchange->parser) != MAELYS_HTTP_COMPLETE) {
         return 0;
     }

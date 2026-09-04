@@ -26,6 +26,8 @@
   self-delimiting response with no `close` token or buffered excess bytes.
   Reuse count and idle lifetime are bounded; an expired, non-quiet or
   differently keyed connection is destroyed before the next request is sent.
+  A connection whose request head or body was not fully written, such as
+  after an early final response, is destroyed rather than parked.
   No request is automatically retried after any request octet may have been
   written. If a parked connection dies between its quietness probe and the
   next write, the exchange fails and the caller decides whether its operation

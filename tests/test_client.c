@@ -21,6 +21,7 @@ typedef struct fake_context {
     int sleep_on_wait;
     int early_response;
     int success_diagnostic;
+    int keep_alive_peer;
 } fake_context_t;
 
 typedef struct fake_stream {
@@ -28,6 +29,7 @@ typedef struct fake_stream {
     size_t index;
     size_t response_offset;
     int closed;
+    int gap_done;
 } fake_stream_t;
 
 static maelys_http_result_t fake_open(
@@ -77,10 +79,29 @@ static maelys_http_io_step_t fake_read(
             }
         }
     }
-    if (stream->response_offset == length) return MAELYS_HTTP_IO_CLOSED;
+    if (stream->response_offset == length) {
+        /* A keep-alive peer stays open and quiet after its response. */
+        return context->keep_alive_peer ? MAELYS_HTTP_IO_WANT_READ :
+            MAELYS_HTTP_IO_CLOSED;
+    }
     amount = length - stream->response_offset;
     if (amount > capacity) amount = capacity;
     if (amount > 7u) amount = 7u;
+    if (context->keep_alive_peer && !stream->gap_done) {
+        /* Serve the head, then report not-ready exactly once before the body,
+         * so an early final response is only half-read by the upload probe. */
+        const char *response_head_end = strstr(response, "\r\n\r\n");
+        size_t head_length = response_head_end ?
+            (size_t)(response_head_end + 4 - response) : length;
+        if (stream->response_offset == head_length) {
+            stream->gap_done = 1;
+            return MAELYS_HTTP_IO_WANT_READ;
+        }
+        if (stream->response_offset < head_length &&
+            stream->response_offset + amount > head_length) {
+            amount = head_length - stream->response_offset;
+        }
+    }
     memcpy(buffer, response + stream->response_offset, amount);
     stream->response_offset += amount;
     *out_read = amount;
@@ -270,7 +291,7 @@ static size_t count_text(const char *text, const char *needle) {
 }
 
 static int test_post_chunked_response(void) {
-    fake_context_t context = {{0}, 1u, 0u, {{0}}, {0}, 0, 0, 0, 0};
+    fake_context_t context = {{0}, 1u, 0u, {{0}}, {0}, 0, 0, 0, 0, 0};
     maelys_http_transport_t *transport;
     maelys_http_client_t *client = NULL;
     maelys_http_request_t *request = NULL;
@@ -307,7 +328,7 @@ static int test_post_chunked_response(void) {
 }
 
 static int test_cross_authority_redirect_strips_secrets(void) {
-    fake_context_t context = {{0}, 2u, 0u, {{0}}, {0}, 0, 0, 0, 0};
+    fake_context_t context = {{0}, 2u, 0u, {{0}}, {0}, 0, 0, 0, 0, 0};
     maelys_http_transport_t *transport;
     maelys_http_client_t *client = NULL;
     maelys_http_request_t *request = NULL;
@@ -348,7 +369,7 @@ static int test_cross_authority_redirect_strips_secrets(void) {
 }
 
 static int test_head_303_remains_head(void) {
-    fake_context_t context = {{0}, 2u, 0u, {{0}}, {0}, 0, 0, 0, 0};
+    fake_context_t context = {{0}, 2u, 0u, {{0}}, {0}, 0, 0, 0, 0, 0};
     maelys_http_transport_t *transport;
     maelys_http_client_t *client = NULL;
     maelys_http_request_t *request = NULL;
@@ -381,7 +402,7 @@ static int test_head_303_remains_head(void) {
 }
 
 static int test_early_final_stops_upload(void) {
-    fake_context_t context = {{0}, 1u, 0u, {{0}}, {0}, 0, 0, 1, 0};
+    fake_context_t context = {{0}, 1u, 0u, {{0}}, {0}, 0, 0, 1, 0, 0};
     maelys_http_transport_t *transport;
     maelys_http_client_t *client = NULL;
     maelys_http_request_t *request = NULL;
@@ -407,8 +428,53 @@ static int test_early_final_stops_upload(void) {
     return 0;
 }
 
+/* Regression: an early final response whose body arrives after the upload
+ * probe completes as a reusable-looking exchange on a connection where the
+ * request body was cut short. Parking it would make the next request head
+ * travel as the rest of that body. */
+static int test_reuse_partial_upload_after_early_response_destroys(void) {
+    fake_context_t context = {{0}, 2u, 0u, {{0}}, {0}, 0, 0, 1, 0, 1};
+    maelys_http_transport_t *transport;
+    maelys_http_client_t *client = NULL;
+    maelys_http_request_t *request = NULL;
+    maelys_http_exchange_t *exchange = NULL;
+    source_t source = {"abcdefghijklmnopqrstuvwxyz", 26u, 0u};
+    context.responses[0] = "HTTP/1.1 413 Payload Too Large\r\n"
+                           "Content-Length: 5\r\n\r\nerror";
+    context.responses[1] = "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok";
+    transport = make_transport(&context);
+    CHECK(maelys_http_client_create(transport, NULL, &client) == MAELYS_HTTP_OK);
+    CHECK(maelys_http_client_set_connection_reuse(client, 1) == MAELYS_HTTP_OK);
+    CHECK(maelys_http_request_config_create("POST", "http", "example.test",
+                                            "/upload", &request) == MAELYS_HTTP_OK);
+    CHECK(maelys_http_request_set_fixed_body(request, 26u, fixed_source, &source) ==
+          MAELYS_HTTP_OK);
+    CHECK(maelys_http_exchange_create(client, request, UINT64_MAX, &exchange) ==
+          MAELYS_HTTP_OK);
+    CHECK(run_to_completion(exchange) == 0);
+    CHECK(maelys_http_exchange_status(exchange) == 413u);
+    CHECK(source.offset < 26u);
+    maelys_http_exchange_release(exchange);
+    maelys_http_request_release(request);
+    CHECK(maelys_http_request_config_create("GET", "http", "example.test",
+                                            "/next", &request) == MAELYS_HTTP_OK);
+    CHECK(maelys_http_exchange_create(client, request, UINT64_MAX, &exchange) ==
+          MAELYS_HTTP_OK);
+    CHECK(run_to_completion(exchange) == 0);
+    CHECK(maelys_http_exchange_status(exchange) == 200u);
+    /* The truncated upload's connection was destroyed, never parked. */
+    CHECK(context.opens == 2u);
+    CHECK(count_text(context.requests[0], "GET /next") == 0u);
+    CHECK(strstr(context.requests[1], "GET /next HTTP/1.1\r\n") != NULL);
+    maelys_http_exchange_release(exchange);
+    maelys_http_request_release(request);
+    maelys_http_client_release(client);
+    maelys_http_transport_release(transport);
+    return 0;
+}
+
 static int test_informational_and_upgrade_limits(void) {
-    fake_context_t context = {{0}, 1u, 0u, {{0}}, {0}, 0, 0, 0, 0};
+    fake_context_t context = {{0}, 1u, 0u, {{0}}, {0}, 0, 0, 0, 0, 0};
     maelys_http_client_limits_t limits;
     maelys_http_transport_t *transport;
     maelys_http_client_t *client = NULL;
@@ -457,7 +523,7 @@ static int test_informational_and_upgrade_limits(void) {
 }
 
 static int test_truncated_cancel_timeout(void) {
-    fake_context_t context = {{0}, 1u, 0u, {{0}}, {0}, 0, 0, 0, 0};
+    fake_context_t context = {{0}, 1u, 0u, {{0}}, {0}, 0, 0, 0, 0, 0};
     maelys_http_transport_t *transport;
     maelys_http_client_t *client = NULL;
     maelys_http_request_t *request = NULL;
@@ -492,7 +558,7 @@ static int test_truncated_cancel_timeout(void) {
 }
 
 static int test_interim_response(void) {
-    fake_context_t context = {{0}, 1u, 0u, {{0}}, {0}, 0, 0, 0, 0};
+    fake_context_t context = {{0}, 1u, 0u, {{0}}, {0}, 0, 0, 0, 0, 0};
     maelys_http_transport_t *transport;
     maelys_http_client_t *client = NULL;
     maelys_http_request_t *request = NULL;
@@ -516,7 +582,7 @@ static int test_interim_response(void) {
 }
 
 static int test_backpressure_chunked_request_and_trailers(void) {
-    fake_context_t context = {{0}, 1u, 0u, {{0}}, {0}, 0, 0, 0, 0};
+    fake_context_t context = {{0}, 1u, 0u, {{0}}, {0}, 0, 0, 0, 0, 0};
     maelys_http_transport_t *transport;
     maelys_http_client_t *client = NULL;
     maelys_http_request_t *request = NULL;
@@ -554,7 +620,7 @@ static int test_backpressure_chunked_request_and_trailers(void) {
 }
 
 static int test_redirect_deny_precedes_body_replay_policy(void) {
-    fake_context_t context = {{0}, 1u, 0u, {{0}}, {0}, 0, 0, 0, 0};
+    fake_context_t context = {{0}, 1u, 0u, {{0}}, {0}, 0, 0, 0, 0, 0};
     maelys_http_transport_t *transport;
     maelys_http_client_t *client = NULL;
     maelys_http_request_t *request = NULL;
@@ -592,7 +658,7 @@ static int test_redirect_deny_precedes_body_replay_policy(void) {
 }
 
 static int test_wait_slice_cancel_and_late_deadline(void) {
-    fake_context_t context = {{0}, 1u, 0u, {{0}}, {0}, 1, 0, 0, 0};
+    fake_context_t context = {{0}, 1u, 0u, {{0}}, {0}, 1, 0, 0, 0, 0};
     maelys_http_transport_t *transport;
     maelys_http_client_t *client = NULL;
     maelys_http_request_t *request = NULL;
@@ -625,7 +691,7 @@ static int test_wait_slice_cancel_and_late_deadline(void) {
 }
 
 static int test_minimum_fairness_budget_and_authority(void) {
-    fake_context_t context = {{0}, 1u, 0u, {{0}}, {0}, 0, 0, 0, 0};
+    fake_context_t context = {{0}, 1u, 0u, {{0}}, {0}, 0, 0, 0, 0, 0};
     maelys_http_client_limits_t limits;
     maelys_http_transport_t *transport;
     maelys_http_client_t *client = NULL;
@@ -653,6 +719,11 @@ static int test_minimum_fairness_budget_and_authority(void) {
     CHECK(maelys_http_request_config_create("GET", "http", "localhost",
                                             "/bad%ZZ", &request) ==
           MAELYS_HTTP_ERR_ARGUMENT);
+    /* A missing target is an argument error, never a NULL dereference. */
+    CHECK(maelys_http_request_config_create("GET", "http", "localhost",
+                                            NULL, &request) ==
+          MAELYS_HTTP_ERR_ARGUMENT);
+    CHECK(request == NULL);
     CHECK(maelys_http_request_config_create("GET", "http", "[::1]",
                                             "/", &request) == MAELYS_HTTP_OK);
     CHECK(maelys_http_exchange_create(client, request, UINT64_MAX, &exchange) ==
@@ -700,7 +771,7 @@ static int exchange_creation_is_limited(
 }
 
 static int test_outgoing_head_limits_before_open(void) {
-    fake_context_t context = {{0}, 1u, 0u, {{0}}, {0}, 0, 0, 0, 0};
+    fake_context_t context = {{0}, 1u, 0u, {{0}}, {0}, 0, 0, 0, 0, 0};
     maelys_http_client_limits_t limits;
     maelys_http_transport_t *transport = make_transport(&context);
     maelys_http_client_t *client = NULL;
@@ -778,7 +849,7 @@ static int test_outgoing_head_limits_before_open(void) {
 }
 
 static int test_success_open_diagnostic_is_owned(void) {
-    fake_context_t context = {{0}, 1u, 0u, {{0}}, {0}, 0, 0, 0, 1};
+    fake_context_t context = {{0}, 1u, 0u, {{0}}, {0}, 0, 0, 0, 1, 0};
     maelys_http_transport_t *transport;
     maelys_http_client_t *client = NULL;
     maelys_http_request_t *request = NULL;
@@ -799,7 +870,7 @@ static int test_success_open_diagnostic_is_owned(void) {
 }
 
 static int test_redirect_head_limit_precedes_second_open(void) {
-    fake_context_t context = {{0}, 1u, 0u, {{0}}, {0}, 0, 0, 0, 0};
+    fake_context_t context = {{0}, 1u, 0u, {{0}}, {0}, 0, 0, 0, 0, 0};
     maelys_http_client_limits_t limits;
     maelys_http_transport_t *transport;
     maelys_http_client_t *client = NULL;
@@ -1462,6 +1533,7 @@ int main(void) {
     CHECK(test_reuse_redirect_other_authority_dials_fresh() == 0);
     CHECK(test_reuse_obs_fold_response_rejected() == 0);
     CHECK(test_reuse_disable_discards_parked_connection() == 0);
+    CHECK(test_reuse_partial_upload_after_early_response_destroys() == 0);
     puts("test_client: ok");
     return 0;
 }

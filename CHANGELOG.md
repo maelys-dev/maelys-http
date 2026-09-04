@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- Never park a connection whose request head or body was not fully written.
+  An early final response (for example `413`) whose body arrived after the
+  upload probe could leave a truncated upload parked for reuse, so the next
+  request head would have been consumed by the peer as body octets.
+- `maelys_http_request_config_create` returns `ERR_ARGUMENT` for a NULL
+  target instead of dereferencing it.
+
 ## 0.1.3 - 2026-09-03
 
 ### Changed
