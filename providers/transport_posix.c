@@ -116,9 +116,12 @@ static void destroy_stream(posix_stream_t *stream) {
 
 /* One readiness wait on the connection's descriptor. A stream owns exactly
  * one descriptor and needs no reactor: System's fd_wait is a single poll(2)
- * bounded by the absolute deadline. */
+ * bounded by the absolute deadline. ERROR and HUP are only indications and
+ * the hosts report them differently (Linux adds POLLERR after a reset,
+ * macOS does not), so readiness is reported as such and the receive, send,
+ * connect_complete or handshake that follows carries the precise cause. */
 static maelys_http_result_t stream_wait(
-    posix_stream_t *stream, int want_read, int want_write, int allow_error,
+    posix_stream_t *stream, int want_read, int want_write,
     uint64_t deadline_ms) {
     unsigned interests = (want_read ? MAELYS_SYS_INTEREST_READ : 0u) |
                          (want_write ? MAELYS_SYS_INTEREST_WRITE : 0u);
@@ -131,8 +134,8 @@ static maelys_http_result_t stream_wait(
         maelys_sys_socket_native_fd(stream->socket_handle), interests,
         deadline_ms, &flags);
     if (result == MAELYS_SYS_ERR_TIMEOUT) return MAELYS_HTTP_ERR_TIMEOUT;
-    if (result != MAELYS_SYS_OK) return MAELYS_HTTP_ERR_IO;
-    if (!allow_error && (flags & MAELYS_SYS_EVENT_ERROR)) {
+    if (result != MAELYS_SYS_OK) {
+        remember(stream, "readiness wait failed");
         return MAELYS_HTTP_ERR_IO;
     }
     return MAELYS_HTTP_OK;
@@ -298,7 +301,7 @@ static maelys_http_result_t progress_open(
         if (result != MAELYS_HTTP_OK) return result;
     }
     if (stream->connect_in_progress) {
-        result = stream_wait(stream, 0, 1, 1, deadline_ms);
+        result = stream_wait(stream, 0, 1, deadline_ms);
         if (result != MAELYS_HTTP_OK) return result;
         if (maelys_sys_socket_connect_complete(stream->socket_handle) !=
             MAELYS_SYS_OK) {
@@ -337,7 +340,7 @@ static maelys_http_result_t progress_open(
             return MAELYS_HTTP_ERR_TLS;
         }
         return stream_wait(stream, step == MAELYS_HTTP_IO_WANT_READ,
-                           step == MAELYS_HTTP_IO_WANT_WRITE, 0, deadline_ms);
+                           step == MAELYS_HTTP_IO_WANT_WRITE, deadline_ms);
     }
     stream->ready = 1;
     return MAELYS_HTTP_OK;
@@ -411,7 +414,7 @@ static maelys_http_result_t wait_stream(
     (void)context;
     if (!stream) return MAELYS_HTTP_ERR_ARGUMENT;
     if (!stream->ready) return progress_open(stream, deadline_ms);
-    return stream_wait(stream, want_read, want_write, 0, deadline_ms);
+    return stream_wait(stream, want_read, want_write, deadline_ms);
 }
 static void cancel_stream(void *context, void *opaque) {
     posix_stream_t *stream = opaque;
