@@ -19,16 +19,16 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - runner: ubuntu-24.04
+          - runner: ubuntu-26.04
             cc: gcc
             cxx: g++
-          - runner: ubuntu-24.04
+          - runner: ubuntu-26.04
             cc: clang
             cxx: clang++
-          - runner: ubuntu-24.04-arm
+          - runner: ubuntu-26.04-arm
             cc: gcc
             cxx: g++
-          - runner: ubuntu-24.04-arm
+          - runner: ubuntu-26.04-arm
             cc: clang
             cxx: clang++
           - runner: macos-15
@@ -36,10 +36,10 @@ jobs:
             cxx: clang++
     runs-on: ${{ matrix.runner }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           path: maelys-http
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: maelys-dev/maelys-system
           ref: 6bd51950c83eaad9ec16cbac318549ab9bb2e928
@@ -52,12 +52,12 @@ jobs:
         run: uname -m
 
   sanitizers:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           path: maelys-http
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: maelys-dev/maelys-system
           ref: 6bd51950c83eaad9ec16cbac318549ab9bb2e928
@@ -67,12 +67,12 @@ jobs:
       - run: make -C maelys-http fuzz-libfuzzer CC=clang SYSTEM_DIR=../maelys-system
 
   thread-sanitizer:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           path: maelys-http
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: maelys-dev/maelys-system
           ref: 6bd51950c83eaad9ec16cbac318549ab9bb2e928
@@ -85,13 +85,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        runner: [ubuntu-24.04, macos-15]
+        runner: [ubuntu-26.04, macos-15]
     runs-on: ${{ matrix.runner }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           path: maelys-http
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: maelys-dev/maelys-system
           ref: 6bd51950c83eaad9ec16cbac318549ab9bb2e928
