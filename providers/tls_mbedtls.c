@@ -243,7 +243,8 @@ maelys_http_result_t maelys_http_tls_mbedtls_client_create(
     if (result == 0) {
         mbedtls_ssl_conf_authmode(&context->config, MBEDTLS_SSL_VERIFY_REQUIRED);
         mbedtls_ssl_conf_ca_chain(&context->config, &context->authorities, NULL);
-#if MBEDTLS_VERSION_MAJOR >= 4
+#if MBEDTLS_VERSION_MAJOR > 3 || \
+    (MBEDTLS_VERSION_MAJOR == 3 && MBEDTLS_VERSION_MINOR >= 6)
         mbedtls_ssl_conf_min_tls_version(
             &context->config, MBEDTLS_SSL_VERSION_TLS1_2);
 #else

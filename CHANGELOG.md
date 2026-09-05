@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.1.5 - 2026-09-05
+
+### Fixed
+
+- Use `mbedtls_ssl_conf_min_tls_version` with Mbed TLS 3.6 and later. The
+  compatibility API is deprecated in 3.6.5, so Ubuntu 26.04 correctly failed
+  the build under `-Werror` even though TLS 1.2 was configured.
+
+### Changed
+
+- CI and release verification use the GitHub-hosted Ubuntu 26.04 x86_64 and
+  arm64 runners, and every `actions/checkout` use is immutably pinned at
+  v7.0.1.
+
 ## 0.1.4 - 2026-09-05
 
 ### Changed

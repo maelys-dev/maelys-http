@@ -14,18 +14,18 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - runner: ubuntu-24.04
+          - runner: ubuntu-26.04
             install: sudo apt-get update && sudo apt-get install -y libmbedtls-dev
-          - runner: ubuntu-24.04-arm
+          - runner: ubuntu-26.04-arm
             install: sudo apt-get update && sudo apt-get install -y libmbedtls-dev
           - runner: macos-15
             install: brew install mbedtls
     runs-on: ${{ matrix.runner }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: maelys-dev/maelys-system
           ref: 6bd51950c83eaad9ec16cbac318549ab9bb2e928
@@ -42,11 +42,11 @@ jobs:
 
   publish:
     needs: verify
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
       - name: Build deterministic source package
