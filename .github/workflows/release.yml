@@ -28,7 +28,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           repository: maelys-dev/maelys-system
-          ref: c1fa1d4ebf1a33f084239d55af565150d5e51e13
+          ref: 6bd51950c83eaad9ec16cbac318549ab9bb2e928
           path: maelys-system
       - run: ${{ matrix.install }}
       - run: make -C maelys-system clean check CC=clang CXX=clang++

@@ -34,10 +34,10 @@ allowlists and relay policy remain outside.
 
 ## Maelys System dependency
 
-The H2 client consumes the additive Maelys System 0.5 socket API in addition
-to its public deadline and reactor APIs. System remains ABI 1. The signed
-`v0.5.0` release commit
-`c1fa1d4ebf1a33f084239d55af565150d5e51e13` is recorded in
+The H2 client consumes the Maelys System 0.9 socket, descriptor wait, wakeup
+and deadline APIs. System remains ABI 1. The signed
+`v0.9.0` release commit
+`6bd51950c83eaad9ec16cbac318549ab9bb2e928` is recorded in
 `deps/MAELYS_SYSTEM_PIN`, the Makefile and CI. No internal System symbol is
 consumed.
 

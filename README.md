@@ -31,12 +31,13 @@ neither advertises nor accepts `h2`.
 
 ## Build
 
-The current integration requires the additive Maelys System 0.5 socket API and
-pins the exact commit named by the signed `v0.5.0` tag.
+The current integration requires Maelys System 0.9 (ABI 1) and pins the
+exact commit named by the signed `v0.9.0` tag. The public System history was
+restarted on 2026-09-03; only tags published after that date are valid pins.
 
 ```sh
 git clone https://github.com/maelys-dev/maelys-system.git
-git -C maelys-system switch --detach c1fa1d4ebf1a33f084239d55af565150d5e51e13
+git -C maelys-system switch --detach 6bd51950c83eaad9ec16cbac318549ab9bb2e928
 git clone https://github.com/maelys-dev/maelys-http.git
 make -C maelys-system
 make -C maelys-http check SYSTEM_DIR=../maelys-system

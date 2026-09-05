@@ -10,8 +10,8 @@ PREFIX ?= /usr/local
 DESTDIR ?=
 REQUIRE_MBEDTLS ?= 0
 SYSTEM_DIR ?= ../maelys-system
-SYSTEM_PIN := c1fa1d4ebf1a33f084239d55af565150d5e51e13
-SYSTEM_REQUIRED_VERSION := 0.5.0
+SYSTEM_PIN := 6bd51950c83eaad9ec16cbac318549ab9bb2e928
+SYSTEM_REQUIRED_VERSION := 0.9.0
 SYSTEM_LIB := $(SYSTEM_DIR)/build/release/lib/libmaelys_sys.a
 
 CPPFLAGS += -Iinclude -Isrc -I$(SYSTEM_DIR)/include

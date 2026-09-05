@@ -1,5 +1,32 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- Pin Maelys System 0.9.0 (`6bd5195`, signed tag `v0.9.0`). The 0.5.0 pin
+  named a commit that no longer exists in the public System history, which
+  broke every CI checkout. The transport now checks `MAELYS_SYS_ABI_VERSION`
+  at compile time.
+- The POSIX transport classifies socket I/O by System's result codes
+  instead of `errno`: `ERR_WOULD_BLOCK` is readiness, `ERR_CLOSED` is only
+  the clean end of stream, and the new `ERR_RESET` fails the exchange. A
+  close-delimited response cut by a TCP reset was previously accepted as
+  complete.
+- Each connection and each DNS wait used a private System reactor; both now
+  use `maelys_sys_fd_wait`, one `poll(2)` bounded by the deadline.
+- DNS completion is signalled through a System wakeup (an `eventfd` on
+  Linux, a pipe elsewhere) instead of a hand-made pipe pair per request.
+
+### Fixed
+
+- Never park a connection whose request head or body was not fully written.
+  An early final response (for example `413`) whose body arrived after the
+  upload probe could leave a truncated upload parked for reuse, so the next
+  request head would have been consumed by the peer as body octets.
+- `maelys_http_request_config_create` returns `ERR_ARGUMENT` for a NULL
+  target instead of dereferencing it.
+
 ## 0.1.3 - 2026-09-03
 
 ### Changed

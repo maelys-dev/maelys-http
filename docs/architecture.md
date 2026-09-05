@@ -47,8 +47,9 @@ redirect, proxy or HTTP type.
 The connector retains `getaddrinfo`, numeric-address ordering, the 32-attempt
 ceiling, connection retry and TLS. Four compatibility resolver workers serve a
 queue of at most 64 requests; exhaustion fails closed instead of spawning
-unbounded threads. Completion reaches the owner reactor through a private
-nonblocking pipe. Cancellation is memory-safe but cannot interrupt portable
+unbounded threads. Completion reaches the owner thread through a System
+wakeup (an `eventfd` on Linux, a pipe elsewhere) that the transport waits on
+with `maelys_sys_fd_wait`. Cancellation is memory-safe but cannot interrupt portable
 `getaddrinfo()`. The resolver seam is private until the supervised-process
 provider described in `resolver-provider-design.md` proves true cancellation,
 bounded IPC and worker-death behavior.
