@@ -5,7 +5,7 @@ libdir=${prefix}/lib
 Name: maelys-http-client
 Description: Streaming HTTP/1.1 client
 Version: @VERSION@
-Requires.private: maelys-sys >= 0.5.0
+Requires.private: maelys-sys >= 0.9.0
 Libs: -L${libdir} -lmaelys_http_client -lmaelys_http
 Libs.private: -pthread
 Cflags: -I${includedir}

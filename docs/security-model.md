@@ -20,6 +20,9 @@
 - Trailers are separate from headers and framing fields are forbidden there.
 - A parser error is sticky; untrusted bytes are never scanned for a new start.
 - Client deadlines use an absolute monotonic deadline.
+- A TCP reset is never an end of stream. The POSIX transport fails the
+  exchange on `ECONNRESET`, so a close-delimited body cannot be reported
+  complete after a reset; only a clean EOF completes it.
 - Cancellation closes the underlying exchange idempotently.
 - Connection reuse is disabled by default. When explicitly enabled, the client
   retains at most one idle connection and only after a fully consumed,

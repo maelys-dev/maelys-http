@@ -12,7 +12,7 @@
 #include <string.h>
 #include <unistd.h>
 
-#include "maelys/sys/fd.h"
+#include "maelys/sys/wakeup.h"
 
 #define RESOLVER_WORKERS 4u
 #define RESOLVER_QUEUE_CAPACITY 64u
@@ -21,7 +21,7 @@ typedef struct posix_resolver_request {
     atomic_uint references;
     pthread_mutex_t lock;
     int lock_initialized;
-    int notification_fds[2];
+    maelys_sys_wakeup_t *wakeup;
     uint64_t request_id;
     char *host;
     char service[6];
@@ -52,8 +52,7 @@ static pthread_once_t resolver_pool_once = PTHREAD_ONCE_INIT;
 static void request_release_reference(posix_resolver_request_t *request) {
     if (!request || atomic_fetch_sub_explicit(
             &request->references, 1u, memory_order_acq_rel) != 1u) return;
-    (void)maelys_sys_fd_close(&request->notification_fds[0]);
-    (void)maelys_sys_fd_close(&request->notification_fds[1]);
+    maelys_sys_wakeup_destroy(request->wakeup);
     (void)pthread_mutex_destroy(&request->lock);
     free(request->host);
     memset(request, 0, sizeof(*request));
@@ -110,8 +109,6 @@ static void resolve_one(posix_resolver_request_t *request) {
     struct addrinfo hints;
     struct addrinfo *addresses = NULL;
     int status;
-    unsigned char ready = 1u;
-    ssize_t written;
     memset(&hints, 0, sizeof(hints));
     hints.ai_family = AF_UNSPEC;
     hints.ai_socktype = SOCK_STREAM;
@@ -129,9 +126,9 @@ static void resolve_one(posix_resolver_request_t *request) {
     }
     (void)pthread_mutex_unlock(&request->lock);
     if (addresses) freeaddrinfo(addresses);
-    do {
-        written = write(request->notification_fds[1], &ready, sizeof(ready));
-    } while (written < 0 && errno == EINTR);
+    /* The wakeup is the cross-thread edge: signal is safe from a worker and
+     * a saturated counter still leaves the wakeup pending. */
+    (void)maelys_sys_wakeup_signal(request->wakeup);
     request_release_reference(request);
 }
 
@@ -205,8 +202,6 @@ static maelys_http_result_t posix_start(
     if (!host || !port || !out_request) return MAELYS_HTTP_ERR_ARGUMENT;
     request = calloc(1u, sizeof(*request));
     if (!request) return MAELYS_HTTP_ERR_MEMORY;
-    request->notification_fds[0] = -1;
-    request->notification_fds[1] = -1;
     request->host = maelys_http_internal_strdup(host);
     request->request_id = request_id;
     request->port = port;
@@ -225,18 +220,8 @@ static maelys_http_result_t posix_start(
         return MAELYS_HTTP_ERR_IO;
     }
     request->lock_initialized = 1;
-    if (maelys_sys_pipe_cloexec(request->notification_fds) != MAELYS_SYS_OK ||
-        maelys_sys_fd_set_nonblocking(request->notification_fds[0]) !=
-            MAELYS_SYS_OK ||
-        maelys_sys_fd_set_nonblocking(request->notification_fds[1]) !=
-            MAELYS_SYS_OK) {
-        if (request->notification_fds[0] >= 0) {
-            (void)maelys_sys_fd_close(&request->notification_fds[0]);
-            (void)maelys_sys_fd_close(&request->notification_fds[1]);
-        }
-        if (request->lock_initialized) {
-            (void)pthread_mutex_destroy(&request->lock);
-        }
+    if (maelys_sys_wakeup_create(&request->wakeup) != MAELYS_SYS_OK) {
+        (void)pthread_mutex_destroy(&request->lock);
         free(request->host);
         free(request);
         return MAELYS_HTTP_ERR_IO;
@@ -256,7 +241,7 @@ static maelys_http_result_t posix_start(
 static int posix_notification_fd(void *context, const void *opaque) {
     const posix_resolver_request_t *request = opaque;
     (void)context;
-    return request ? request->notification_fds[0] : -1;
+    return request ? maelys_sys_wakeup_fd(request->wakeup) : -1;
 }
 
 static maelys_http_result_t posix_take(
@@ -268,8 +253,6 @@ static maelys_http_result_t posix_take(
     size_t *out_count,
     char **out_error) {
     posix_resolver_request_t *request = opaque;
-    unsigned char notifications[16];
-    ssize_t received;
     maelys_http_result_t result;
     (void)context;
     if (out_response_id) *out_response_id = 0u;
@@ -278,11 +261,8 @@ static maelys_http_result_t posix_take(
     if (!request || !out_response_id || !addresses || !capacity || !out_count) {
         return MAELYS_HTTP_ERR_ARGUMENT;
     }
-    do {
-        received = read(request->notification_fds[0],
-                        notifications, sizeof(notifications));
-    } while (received < 0 && errno == EINTR);
-    if (received < 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
+    /* Consuming with nothing pending is a success; the state below decides. */
+    if (maelys_sys_wakeup_consume(request->wakeup) != MAELYS_SYS_OK) {
         return MAELYS_HTTP_ERR_IO;
     }
     (void)pthread_mutex_lock(&request->lock);

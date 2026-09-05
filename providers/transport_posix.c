@@ -9,8 +9,13 @@
 #include <string.h>
 #include <sys/socket.h>
 
-#include "maelys/sys/loop.h"
+#include "maelys/sys/fd.h"
 #include "maelys/sys/socket.h"
+#include "maelys/sys/version.h"
+
+#if MAELYS_SYS_ABI_VERSION != 1u
+#error "maelys-http targets Maelys System ABI 1"
+#endif
 
 typedef struct posix_context {
     maelys_http_tls_provider_t *tls_provider;
@@ -30,12 +35,6 @@ typedef struct posix_stream {
     char *scheme;
     maelys_http_tls_provider_t *tls_provider;
     maelys_sys_socket_t *socket_handle;
-    maelys_sys_loop_t *loop;
-    maelys_sys_watch_t watch;
-    int watched;
-    maelys_sys_loop_t *resolver_loop;
-    maelys_sys_watch_t resolver_watch;
-    int resolver_watched;
     int closed;
     int cancelled;
     int ready;
@@ -107,10 +106,6 @@ static void destroy_stream(posix_stream_t *stream) {
         (void)maelys_http_resolver_cancel_internal(stream->resolver_request);
         maelys_http_resolver_request_release_internal(stream->resolver_request);
     }
-    if (stream->watched && stream->loop) {
-        (void)maelys_sys_loop_unwatch(stream->loop, stream->watch);
-    }
-    if (stream->loop) (void)maelys_sys_loop_destroy(&stream->loop);
     (void)maelys_sys_socket_release(&stream->socket_handle);
     maelys_http_tls_session_release(stream->tls);
     maelys_http_tls_provider_release(stream->tls_provider);
@@ -119,30 +114,25 @@ static void destroy_stream(posix_stream_t *stream) {
     free(stream);
 }
 
+/* One readiness wait on the connection's descriptor. A stream owns exactly
+ * one descriptor and needs no reactor: System's fd_wait is a single poll(2)
+ * bounded by the absolute deadline. */
 static maelys_http_result_t stream_wait(
     posix_stream_t *stream, int want_read, int want_write, int allow_error,
     uint64_t deadline_ms) {
-    maelys_sys_event_t events[2];
-    size_t count = 0u;
-    maelys_sys_step_result_t step_result;
     unsigned interests = (want_read ? MAELYS_SYS_INTEREST_READ : 0u) |
                          (want_write ? MAELYS_SYS_INTEREST_WRITE : 0u);
+    unsigned flags = 0u;
     maelys_sys_result_t result;
-    if (!stream || stream->closed || !interests) return MAELYS_HTTP_ERR_ARGUMENT;
-    if (!stream->watched) {
-        result = maelys_sys_loop_watch_fd(
-            stream->loop, maelys_sys_socket_native_fd(stream->socket_handle), interests,
-                                          1u, &stream->watch);
-        if (result == MAELYS_SYS_OK) stream->watched = 1;
-    } else {
-        result = maelys_sys_loop_modify(stream->loop, stream->watch, interests);
+    if (!stream || stream->closed || !interests || !stream->socket_handle) {
+        return MAELYS_HTTP_ERR_ARGUMENT;
     }
+    result = maelys_sys_fd_wait(
+        maelys_sys_socket_native_fd(stream->socket_handle), interests,
+        deadline_ms, &flags);
+    if (result == MAELYS_SYS_ERR_TIMEOUT) return MAELYS_HTTP_ERR_TIMEOUT;
     if (result != MAELYS_SYS_OK) return MAELYS_HTTP_ERR_IO;
-    result = maelys_sys_loop_step(stream->loop, deadline_ms, events, 2u,
-                                  &count, &step_result);
-    if (result != MAELYS_SYS_OK) return MAELYS_HTTP_ERR_IO;
-    if (step_result == MAELYS_SYS_STEP_TIMEOUT || !count) return MAELYS_HTTP_ERR_TIMEOUT;
-    if (!allow_error && (events[0].flags & MAELYS_SYS_EVENT_ERROR)) {
+    if (!allow_error && (flags & MAELYS_SYS_EVENT_ERROR)) {
         return MAELYS_HTTP_ERR_IO;
     }
     return MAELYS_HTTP_OK;
@@ -150,11 +140,6 @@ static maelys_http_result_t stream_wait(
 
 static void discard_connection(posix_stream_t *stream) {
     if (!stream) return;
-    if (stream->watched) {
-        (void)maelys_sys_loop_unwatch(stream->loop, stream->watch);
-        stream->watched = 0;
-    }
-    if (stream->loop) (void)maelys_sys_loop_destroy(&stream->loop);
     (void)maelys_sys_socket_release(&stream->socket_handle);
 }
 
@@ -202,10 +187,8 @@ static maelys_http_result_t open_stream(
 
 static maelys_http_result_t wait_for_resolution(
     posix_stream_t *stream, uint64_t deadline_ms) {
-    maelys_sys_event_t event;
-    size_t event_count = 0u;
-    maelys_sys_step_result_t step_result;
-    maelys_sys_result_t loop_result;
+    unsigned flags = 0u;
+    maelys_sys_result_t wait_result;
     maelys_http_result_t take_result;
     char *resolver_error = NULL;
     int notification_fd;
@@ -218,48 +201,23 @@ static maelys_http_result_t wait_for_resolution(
         remember(stream, "resolver notification descriptor is invalid");
         return MAELYS_HTTP_ERR_IO;
     }
-    if (!stream->resolver_loop &&
-        maelys_sys_loop_create(MAELYS_SYS_LOOP_AUTO,
-                               &stream->resolver_loop) != MAELYS_SYS_OK) {
-        remember(stream, "DNS readiness loop creation failed");
-        return MAELYS_HTTP_ERR_IO;
-    }
-    if (!stream->resolver_watched) {
-        loop_result = maelys_sys_loop_watch_fd(
-            stream->resolver_loop, notification_fd,
-            MAELYS_SYS_INTEREST_READ, 1u, &stream->resolver_watch);
-        if (loop_result != MAELYS_SYS_OK) {
-            remember(stream, "DNS readiness watch failed");
-            return MAELYS_HTTP_ERR_IO;
-        }
-        stream->resolver_watched = 1;
-    }
-    loop_result = maelys_sys_loop_step(
-        stream->resolver_loop, deadline_ms, &event, 1u,
-        &event_count, &step_result);
-    if (loop_result != MAELYS_SYS_OK) {
+    wait_result = maelys_sys_fd_wait(notification_fd, MAELYS_SYS_INTEREST_READ,
+                                     deadline_ms, &flags);
+    if (wait_result == MAELYS_SYS_ERR_TIMEOUT) return MAELYS_HTTP_ERR_TIMEOUT;
+    if (wait_result != MAELYS_SYS_OK) {
         remember(stream, "DNS readiness wait failed");
         return MAELYS_HTTP_ERR_IO;
-    }
-    if (step_result == MAELYS_SYS_STEP_TIMEOUT || !event_count) {
-        return MAELYS_HTTP_ERR_TIMEOUT;
     }
     take_result = maelys_http_resolver_take_internal(
         stream->resolver_request, stream->addresses,
         MAELYS_HTTP_RESOLVER_MAX_ADDRESSES, &stream->address_count,
         &resolver_error);
     if (take_result == MAELYS_HTTP_AGAIN) {
-        remember(stream, event.flags & MAELYS_SYS_EVENT_ERROR ?
+        remember(stream, flags & (MAELYS_SYS_EVENT_ERROR | MAELYS_SYS_EVENT_HUP) ?
             "resolver worker or notification channel died" :
             "resolver signalled readiness without a terminal response");
         return MAELYS_HTTP_ERR_IO;
     }
-    if (stream->resolver_watched) {
-        (void)maelys_sys_loop_unwatch(stream->resolver_loop,
-                                      stream->resolver_watch);
-        stream->resolver_watched = 0;
-    }
-    (void)maelys_sys_loop_destroy(&stream->resolver_loop);
     if (take_result != MAELYS_HTTP_OK) {
         remember(stream, resolver_error ? resolver_error : "DNS resolution failed");
         free(resolver_error);
@@ -304,9 +262,7 @@ static maelys_http_result_t begin_next_connection(posix_stream_t *stream) {
         ++stream->address_attempts;
         if (maelys_sys_socket_create(
                 family, SOCK_STREAM, IPPROTO_TCP,
-                &stream->socket_handle) != MAELYS_SYS_OK ||
-            maelys_sys_loop_create(MAELYS_SYS_LOOP_AUTO,
-                                   &stream->loop) != MAELYS_SYS_OK) {
+                &stream->socket_handle) != MAELYS_SYS_OK) {
             discard_connection(stream);
             continue;
         }
@@ -405,10 +361,13 @@ static maelys_http_io_step_t raw_read(
     result = maelys_sys_socket_receive(
         stream->socket_handle, buffer, capacity, out_read);
     if (result == MAELYS_SYS_OK) return MAELYS_HTTP_IO_COMPLETE;
+    if (result == MAELYS_SYS_ERR_WOULD_BLOCK) return MAELYS_HTTP_IO_WANT_READ;
+    /* Only a clean end of stream is CLOSED. A peer reset is a failure: a
+     * body delimited by the close must never pass as complete after it. */
     if (result == MAELYS_SYS_ERR_CLOSED) return MAELYS_HTTP_IO_CLOSED;
-    if (result == MAELYS_SYS_ERR_OS &&
-        (errno == EAGAIN || errno == EWOULDBLOCK)) {
-        return MAELYS_HTTP_IO_WANT_READ;
+    if (result == MAELYS_SYS_ERR_RESET) {
+        remember(stream, "connection reset by peer");
+        return MAELYS_HTTP_IO_FAILED;
     }
     remember(stream, strerror(errno));
     return MAELYS_HTTP_IO_FAILED;
@@ -432,9 +391,14 @@ static maelys_http_io_step_t raw_write(
     result = maelys_sys_socket_send(
         stream->socket_handle, buffer, length, out_written);
     if (result == MAELYS_SYS_OK) return MAELYS_HTTP_IO_COMPLETE;
-    if (result == MAELYS_SYS_ERR_OS &&
-        (errno == EAGAIN || errno == EWOULDBLOCK)) {
-        return MAELYS_HTTP_IO_WANT_WRITE;
+    if (result == MAELYS_SYS_ERR_WOULD_BLOCK) return MAELYS_HTTP_IO_WANT_WRITE;
+    if (result == MAELYS_SYS_ERR_CLOSED) {
+        remember(stream, "peer closed the connection before the request was sent");
+        return MAELYS_HTTP_IO_FAILED;
+    }
+    if (result == MAELYS_SYS_ERR_RESET) {
+        remember(stream, "connection reset by peer");
+        return MAELYS_HTTP_IO_FAILED;
     }
     remember(stream, strerror(errno));
     return MAELYS_HTTP_IO_FAILED;
@@ -470,18 +434,8 @@ static void close_stream(void *context, void *opaque) {
     if (stream->resolver_request) {
         (void)maelys_http_resolver_cancel_internal(stream->resolver_request);
     }
-    if (stream->resolver_watched && stream->resolver_loop) {
-        (void)maelys_sys_loop_unwatch(stream->resolver_loop,
-                                      stream->resolver_watch);
-        stream->resolver_watched = 0;
-    }
-    if (stream->resolver_loop) {
-        (void)maelys_sys_loop_destroy(&stream->resolver_loop);
-    }
     if (stream->tls) (void)maelys_http_tls_session_shutdown(stream->tls);
-    if (stream->ready || stream->socket_handle || stream->loop) {
-        discard_connection(stream);
-    }
+    if (stream->socket_handle) discard_connection(stream);
 }
 static const char *stream_error(void *context, const void *opaque) {
     const posix_stream_t *stream = opaque;

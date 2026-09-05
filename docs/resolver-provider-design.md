@@ -20,7 +20,7 @@ HTTP POSIX transport (owner/reactor thread)
 private resolver provider
           │ borrowed notification fd
           ▼
-System readiness loop ──► nonblocking take()
+System fd_wait      ──► nonblocking take()
           │
           ▼
 validated numeric endpoints, at most 32
