@@ -14,7 +14,10 @@
   close-delimited response cut by a TCP reset was previously accepted as
   complete.
 - Each connection and each DNS wait used a private System reactor; both now
-  use `maelys_sys_fd_wait`, one `poll(2)` bounded by the deadline.
+  use `maelys_sys_fd_wait`, one `poll(2)` bounded by the deadline. A
+  readiness wait never fails on the `ERROR` indication alone: the I/O call
+  that follows carries the cause, so a reset is diagnosed as a reset on
+  every host.
 - DNS completion is signalled through a System wakeup (an `eventfd` on
   Linux, a pipe elsewhere) instead of a hand-made pipe pair per request.
 
