@@ -4,8 +4,12 @@ set -eu
 if command -v rg >/dev/null 2>&1; then
     findings=$(rg -n '[ 	]+$' --hidden \
         -g '!build/**' -g '!dist/**' -g '!.git/**' .) && status=0 || status=$?
-else
+elif git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     findings=$(git grep -n -I -E '[[:blank:]]+$' -- .) && status=0 || status=$?
+else
+    findings=$(grep -R -n -I -E \
+        --exclude-dir=build --exclude-dir=dist --exclude-dir=.git \
+        '[[:blank:]]+$' .) && status=0 || status=$?
 fi
 
 if [ "$status" -eq 0 ]; then

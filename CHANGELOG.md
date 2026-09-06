@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.7 - 2026-09-06
+
+### Fixed
+
+- Make the whitespace audit work from a source archive without Git metadata
+  when ripgrep is unavailable.
+
 ## 0.1.6 - 2026-09-06
 
 ### Security
