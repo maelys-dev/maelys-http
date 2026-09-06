@@ -103,6 +103,39 @@ static int test_request_all_fragment_sizes(void) {
     return 0;
 }
 
+static int expect_request_target(const char *wire, const char *target) {
+    body_capture_t capture = {{0}, 0u};
+    maelys_http_parser_t *parser = NULL;
+    maelys_http_slice_t parsed_target;
+    size_t length = strlen(wire);
+    CHECK(parse_fragmented(MAELYS_HTTP_PARSE_REQUEST,
+                           (const unsigned char *)wire, length, length,
+                           MAELYS_HTTP_COMPLETE, &capture, &parser) == 0);
+    parsed_target = maelys_http_parser_target(parser);
+    CHECK(parsed_target.length == strlen(target));
+    CHECK(!memcmp(parsed_target.data, target, parsed_target.length));
+    CHECK(capture.length == 0u);
+    maelys_http_parser_release(parser);
+    CHECK(parse_at_every_cut(MAELYS_HTTP_PARSE_REQUEST,
+                             (const unsigned char *)wire, length) == 0);
+    return 0;
+}
+
+/* Generic request-target cases adapted from Maelys Egress's proxy parser.
+ * Authentication, Host/authority policy and header rewriting remain Egress
+ * responsibilities; only the shared HTTP syntax belongs in this codec. */
+static int test_proxy_request_target_forms(void) {
+    static const char absolute[] =
+        "GET http://example.com/path HTTP/1.1\r\n"
+        "Host: example.com\r\n\r\n";
+    static const char connect[] =
+        "CONNECT example.com:443 HTTP/1.1\r\n"
+        "Host: example.com:443\r\n\r\n";
+    CHECK(expect_request_target(absolute, "http://example.com/path") == 0);
+    CHECK(expect_request_target(connect, "example.com:443") == 0);
+    return 0;
+}
+
 static int test_chunked_response_and_trailers(void) {
     static const unsigned char wire[] =
         "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n"
@@ -246,6 +279,37 @@ static int expect_reject(const unsigned char *wire, size_t length,
     return 0;
 }
 
+static int expect_response_reject(const char *wire,
+                                  maelys_http_result_t expected) {
+    maelys_http_parser_t *parser = NULL;
+    size_t consumed = 0u;
+    CHECK(maelys_http_parser_create(MAELYS_HTTP_PARSE_RESPONSE, NULL,
+                                    NULL, NULL, &parser) == MAELYS_HTTP_OK);
+    CHECK(maelys_http_parser_feed(parser, wire, strlen(wire), &consumed) ==
+          expected);
+    consumed = 0u;
+    CHECK(maelys_http_parser_feed(parser, "HTTP/1.1 200 OK\r\n\r\n", 19u,
+                                  &consumed) == expected);
+    CHECK(consumed == 0u);
+    maelys_http_parser_release(parser);
+    return 0;
+}
+
+static int test_forbidden_bodiless_response_framing(void) {
+    static const char *wire[] = {
+        "HTTP/1.1 100 Continue\r\nContent-Length: 0\r\n\r\n",
+        "HTTP/1.1 103 Early Hints\r\nTransfer-Encoding: chunked\r\n\r\n",
+        "HTTP/1.1 204 No Content\r\nContent-Length: 0\r\n\r\n",
+        "HTTP/1.1 204 No Content\r\nTransfer-Encoding: chunked\r\n\r\n"
+    };
+    size_t index;
+    for (index = 0u; index < sizeof(wire) / sizeof(wire[0]); ++index) {
+        CHECK(expect_response_reject(wire[index], MAELYS_HTTP_ERR_FRAMING) ==
+              0);
+    }
+    return 0;
+}
+
 static int test_adversarial(void) {
     static const unsigned char missing_host[] =
         "GET / HTTP/1.1\r\nX: y\r\n\r\n";
@@ -260,6 +324,9 @@ static int test_adversarial(void) {
     static const unsigned char userinfo_host[] =
         "GET / HTTP/1.1\r\nHost: user@host\r\n\r\n";
     static const unsigned char bare_lf[] = "GET / HTTP/1.1\nHost: x\n\n";
+    static const unsigned char bare_cr[] =
+        "GET /x HTTP/1.1\r\nHost: example.com\r\n"
+        "X-Ambiguous: one\rInjected: two\r\n\r\n";
     static const unsigned char obs_fold[] =
         "GET / HTTP/1.1\r\nHost: x\r\n folded\r\n\r\n";
     static const unsigned char duplicate_cl[] =
@@ -288,7 +355,11 @@ static int test_adversarial(void) {
         "GET /a%ZZ HTTP/1.1\r\nHost: example.test\r\n\r\n";
     static const unsigned char backslash_target[] =
         "GET /a\\b HTTP/1.1\r\nHost: example.test\r\n\r\n";
+    static const unsigned char unbracketed_ipv6_connect[] =
+        "CONNECT 2001:db8::1 HTTP/1.1\r\nHost: 2001:db8::1\r\n\r\n";
     CHECK(expect_reject(bare_lf, sizeof(bare_lf) - 1u, MAELYS_HTTP_ERR_SYNTAX) == 0);
+    CHECK(expect_reject(bare_cr, sizeof(bare_cr) - 1u,
+                        MAELYS_HTTP_ERR_SYNTAX) == 0);
     CHECK(expect_reject(missing_host, sizeof(missing_host) - 1u,
                         MAELYS_HTTP_ERR_FRAMING) == 0);
     CHECK(expect_reject(duplicate_host, sizeof(duplicate_host) - 1u,
@@ -317,6 +388,9 @@ static int test_adversarial(void) {
     CHECK(expect_reject(bad_percent_target, sizeof(bad_percent_target) - 1u,
                         MAELYS_HTTP_ERR_SYNTAX) == 0);
     CHECK(expect_reject(backslash_target, sizeof(backslash_target) - 1u,
+                        MAELYS_HTTP_ERR_SYNTAX) == 0);
+    CHECK(expect_reject(unbracketed_ipv6_connect,
+                        sizeof(unbracketed_ipv6_connect) - 1u,
                         MAELYS_HTTP_ERR_SYNTAX) == 0);
     return 0;
 }
@@ -444,9 +518,11 @@ static int test_limits(void) {
 
 int main(void) {
     CHECK(test_request_all_fragment_sizes() == 0);
+    CHECK(test_proxy_request_target_forms() == 0);
     CHECK(test_chunked_response_and_trailers() == 0);
     CHECK(test_close_delimited_and_head() == 0);
     CHECK(test_responses_without_message_body() == 0);
+    CHECK(test_forbidden_bodiless_response_framing() == 0);
     CHECK(test_adversarial() == 0);
     CHECK(test_chunk_extension_grammar() == 0);
     CHECK(test_body_callback_contract() == 0);

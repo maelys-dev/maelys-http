@@ -6,6 +6,7 @@
 #include <mbedtls/net_sockets.h>
 #include <mbedtls/ssl.h>
 #include <mbedtls/version.h>
+#include "mbedtls_version_policy.h"
 #include <mbedtls/x509_crt.h>
 #if MBEDTLS_VERSION_MAJOR < 4
 #include <mbedtls/ctr_drbg.h>
@@ -49,6 +50,20 @@ static char *copy_error(const char *prefix, int code) {
     message = malloc(length);
     if (message) (void)snprintf(message, length, "%s: %s", prefix, detail);
     return message;
+}
+
+static char *copy_message(const char *source) {
+    size_t length = strlen(source) + 1u;
+    char *message = malloc(length);
+    if (message) memcpy(message, source, length);
+    return message;
+}
+
+static int runtime_version_is_accepted(void) {
+    unsigned version = mbedtls_version_get_number();
+    return MAELYS_HTTP_MBEDTLS_ACCEPTED_VERSION(
+        (version >> 24u) & 0xffu, (version >> 16u) & 0xffu,
+        (version >> 8u) & 0xffu);
 }
 
 static int socket_send(void *opaque, const unsigned char *buffer, size_t length) {
@@ -217,6 +232,13 @@ maelys_http_result_t maelys_http_tls_mbedtls_client_create(
     if (out_error) *out_error = NULL;
     if (!files || !files->ca_file || !files->ca_file[0] || !out_provider) {
         return MAELYS_HTTP_ERR_ARGUMENT;
+    }
+    if (!runtime_version_is_accepted()) {
+        if (out_error) {
+            *out_error = copy_message(
+                "Mbed TLS runtime version violates the security policy");
+        }
+        return MAELYS_HTTP_ERR_TLS;
     }
 #if MBEDTLS_VERSION_MAJOR >= 4
     (void)pthread_once(&psa_once, initialize_psa);

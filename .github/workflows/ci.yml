@@ -85,7 +85,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        runner: [ubuntu-26.04, macos-15]
+        include:
+          - runner: ubuntu-26.04
+          - runner: macos-15
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -96,9 +98,25 @@ jobs:
           repository: maelys-dev/maelys-system
           ref: 6bd51950c83eaad9ec16cbac318549ab9bb2e928
           path: maelys-system
-      - name: Install Mbed TLS (Linux)
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libmbedtls-dev
+        with:
+          repository: Mbed-TLS/mbedtls
+          ref: 068ff080b369adfac81509f9b57b2afabaf82dc5 # v3.6.7
+          path: mbedtls
+          submodules: recursive
+      - name: Build pinned Mbed TLS 3.6.7 (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          cmake -S mbedtls -B mbedtls-build \
+            -DENABLE_PROGRAMS=OFF -DENABLE_TESTING=OFF \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX="$GITHUB_WORKSPACE/mbedtls-prefix"
+          cmake --build mbedtls-build --parallel
+          cmake --install mbedtls-build
+          test -f "$GITHUB_WORKSPACE/mbedtls-prefix/lib/pkgconfig/mbedtls.pc"
+          echo "PKG_CONFIG_PATH=$GITHUB_WORKSPACE/mbedtls-prefix/lib/pkgconfig" \
+            >>"$GITHUB_ENV"
       - name: Install Mbed TLS (macOS)
         if: runner.os == 'macOS'
         run: brew install mbedtls

@@ -40,6 +40,14 @@
 - The shipped Mbed TLS provider requires an explicit trust anchor, TLS 1.2 or
   newer, verifies both chain and hostname, and rejects transport EOF without
   authenticated `close_notify` when HTTP framing depends on connection close.
+- The Mbed TLS provider rejects unsupported or security-obsolete upstream
+  versions at compile time and checks the linked runtime again before creating
+  a client, preventing a safe build from being downgraded at final link. A
+  narrowly scoped override exists only for maintained distribution branches
+  carrying backported security fixes.
+- `Content-Length` and `Transfer-Encoding` on 1xx or 204 responses are rejected
+  as framing errors, so forbidden pseudo-bodies cannot survive into a reused
+  connection. HEAD and 304 representation metadata remain accepted.
 - Secret header values are never included in library diagnostics.
 
 ## Caller responsibilities

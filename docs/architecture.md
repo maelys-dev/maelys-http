@@ -17,7 +17,7 @@ framing codec       fake or POSIX/TLS
        │                 │
        └────────┬────────┘
                 ▼
-        maelys-system 0.5
+        maelys-system 0.9
       readiness/deadlines/socket
 ```
 
@@ -37,7 +37,7 @@ It uses Maelys System for opaque socket lifecycle, mechanical connect,
 partial I/O, shutdown, resolver notification readiness and absolute deadlines.
 Address order, retry and TLS state remain in this HTTP transport.
 
-## System 0.5 boundary
+## System 0.9 boundary
 
 System owns only portable POSIX mechanics: nonblocking+CLOEXEC socket creation
 and accept, SIGPIPE protection, connect start/completion, partial receive/send,
@@ -77,6 +77,8 @@ The TLS provider is nonblocking, owner-thread-confined, borrows the socket and
 never closes it. Client session creation requires a nonempty server name, used
 for SNI and certificate hostname validation. Trust verification is mandatory.
 The optional Mbed TLS provider is linked separately.
+Only maintained Mbed TLS 3.x and 4.x security patch levels compile by default;
+distribution backports require an explicit acknowledgement macro.
 
 HTTP/1.1 is the only protocol engine. No provider may silently negotiate `h2`.
 ALPN support belongs to a future ABI addition with an explicit fallback policy.

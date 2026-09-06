@@ -1343,6 +1343,30 @@ static int test_reuse_framing_error_destroys_and_surfaces(void) {
     return 0;
 }
 
+static int test_reuse_forbidden_204_framing_destroys(void) {
+    ka_context_t context;
+    maelys_http_transport_t *transport;
+    maelys_http_client_t *client = NULL;
+    memset(&context, 0, sizeof(context));
+    context.responses[0] =
+        "HTTP/1.1 204 No Content\r\nContent-Length: 0\r\n\r\n";
+    context.responses[1] =
+        "HTTP/1.1 200 OK\r\nContent-Length: 3\r\n\r\ntwo";
+    context.response_count = 2u;
+    transport = make_ka_transport(&context);
+    CHECK(transport != NULL);
+    CHECK(maelys_http_client_create(transport, NULL, &client) == MAELYS_HTTP_OK);
+    CHECK(maelys_http_client_set_connection_reuse(client, 1) == MAELYS_HTTP_OK);
+    CHECK(ka_get_expect_error(client, "example.test",
+                              MAELYS_HTTP_ERR_FRAMING) == 0);
+    CHECK(ka_get(client, "example.test", 200u, "two") == 0);
+    CHECK(context.opens == 2u);
+    maelys_http_client_release(client);
+    maelys_http_transport_release(transport);
+    CHECK(context.releases == context.opens);
+    return 0;
+}
+
 static maelys_http_sink_step_t always_pause_sink(
     void *opaque, const unsigned char *bytes, size_t length) {
     (void)opaque; (void)bytes; (void)length;
@@ -1529,6 +1553,7 @@ int main(void) {
     CHECK(test_reuse_idle_ttl_expiry_redials() == 0);
     CHECK(test_reuse_budget_exhaustion_redials() == 0);
     CHECK(test_reuse_framing_error_destroys_and_surfaces() == 0);
+    CHECK(test_reuse_forbidden_204_framing_destroys() == 0);
     CHECK(test_reuse_unconsumed_body_destroys() == 0);
     CHECK(test_reuse_redirect_other_authority_dials_fresh() == 0);
     CHECK(test_reuse_obs_fold_response_rejected() == 0);

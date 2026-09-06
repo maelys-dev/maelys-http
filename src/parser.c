@@ -346,6 +346,17 @@ static maelys_http_result_t headers_complete(maelys_http_parser_t *parser) {
         return fail(parser, MAELYS_HTTP_ERR_FRAMING);
     }
     if (saw_length && saw_transfer) return fail(parser, MAELYS_HTTP_ERR_FRAMING);
+    /* RFC 9110 section 8.6 and RFC 9112 section 6.1 forbid both framing
+     * fields on 1xx and 204 responses. Treat them as terminal framing errors
+     * instead of merely ignoring them: otherwise a peer can delay the
+     * purported body until after an idle connection has been reused. HEAD and
+     * 304 may legitimately carry representation metadata, so they remain
+     * governed by the no-body precedence rule below. */
+    if (parser->kind == MAELYS_HTTP_PARSE_RESPONSE &&
+        (parser->status / 100u == 1u || parser->status == 204u) &&
+        (saw_length || saw_transfer)) {
+        return fail(parser, MAELYS_HTTP_ERR_FRAMING);
+    }
     response_has_no_body = parser->kind == MAELYS_HTTP_PARSE_RESPONSE &&
         (parser->response_to_head || parser->status / 100u == 1u ||
          parser->status == 204u || parser->status == 304u ||

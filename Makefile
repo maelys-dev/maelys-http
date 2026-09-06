@@ -9,12 +9,14 @@ RANLIB ?= ranlib
 PREFIX ?= /usr/local
 DESTDIR ?=
 REQUIRE_MBEDTLS ?= 0
+MBEDTLS_PKGCONFIG_MIN_VERSION ?= 3.6.7
 SYSTEM_DIR ?= ../maelys-system
 SYSTEM_PIN := 6bd51950c83eaad9ec16cbac318549ab9bb2e928
 SYSTEM_REQUIRED_VERSION := 0.9.0
 SYSTEM_LIB := $(SYSTEM_DIR)/build/release/lib/libmaelys_sys.a
 
-CPPFLAGS += -Iinclude -Isrc -I$(SYSTEM_DIR)/include
+MAELYS_INTERNAL_CPPFLAGS = -Iinclude -Isrc -I$(SYSTEM_DIR)/include
+MAELYS_CPPFLAGS = $(MAELYS_INTERNAL_CPPFLAGS) $(CPPFLAGS)
 CFLAGS ?= -O2
 CFLAGS += -std=c11 -D_POSIX_C_SOURCE=200809L -Wall -Wextra -Wpedantic -Werror \
 	-Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wformat=2
@@ -30,9 +32,10 @@ TEST_BINS := $(BUILD)/test_parser $(BUILD)/test_conformance $(BUILD)/test_messag
 	$(BUILD)/test_transport_posix $(BUILD)/test_resolver_internal \
 	$(BUILD)/test_tls_provider $(BUILD)/header_cpp
 
-.PHONY: all clean check check-version test sanitizers tsan fuzzers \
+.PHONY: all clean check check-version check-mbedtls-policy test sanitizers tsan fuzzers \
 	fuzz-libfuzzer install uninstall check-system-pin install-check package \
-	package-homebrew package-reproducibility-check check-mbedtls tls-integration \
+	package-homebrew package-reproducibility-check package-sbom package-archive-check \
+	check-mbedtls tls-integration \
 	install-mbedtls
 
 all: $(BUILD)/libmaelys_http.a $(BUILD)/libmaelys_http_client.a
@@ -42,17 +45,17 @@ $(BUILD):
 
 $(BUILD)/%.o: src/%.c src/internal.h include/maelys/http.h \
 	include/maelys/http_client.h include/maelys/http_tls.h | $(BUILD)
-	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
+	$(CC) $(MAELYS_CPPFLAGS) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/transport_posix.o: providers/transport_posix.c src/internal.h \
 	src/resolver_internal.h \
 	include/maelys/http_transports.h include/maelys/http_client.h \
 	include/maelys/http_tls.h | $(BUILD)
-	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
+	$(CC) $(MAELYS_CPPFLAGS) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/resolver_posix.o: providers/resolver_posix.c src/internal.h \
 	src/resolver_internal.h | $(BUILD)
-	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
+	$(CC) $(MAELYS_CPPFLAGS) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/libmaelys_http.a: $(CORE_OBJECTS)
 	ZERO_AR_DATE=1 $(AR) rcs $@ $^
@@ -63,34 +66,34 @@ $(BUILD)/libmaelys_http_client.a: $(CLIENT_OBJECTS)
 	$(RANLIB) $@
 
 $(BUILD)/test_parser: tests/test_parser.c $(BUILD)/libmaelys_http.a
-	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libmaelys_http.a -o $@
+	$(CC) $(MAELYS_CPPFLAGS) $(CFLAGS) $< $(BUILD)/libmaelys_http.a -o $@
 
 $(BUILD)/test_conformance: tests/test_conformance.c $(BUILD)/libmaelys_http.a
-	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libmaelys_http.a -o $@
+	$(CC) $(MAELYS_CPPFLAGS) $(CFLAGS) $< $(BUILD)/libmaelys_http.a -o $@
 
 $(BUILD)/test_message: tests/test_message.c $(BUILD)/libmaelys_http.a
-	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libmaelys_http.a -o $@
+	$(CC) $(MAELYS_CPPFLAGS) $(CFLAGS) $< $(BUILD)/libmaelys_http.a -o $@
 
 $(BUILD)/test_client: tests/test_client.c $(BUILD)/libmaelys_http_client.a \
 	$(BUILD)/libmaelys_http.a $(SYSTEM_LIB)
-	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libmaelys_http_client.a \
+	$(CC) $(MAELYS_CPPFLAGS) $(CFLAGS) $< $(BUILD)/libmaelys_http_client.a \
 		$(BUILD)/libmaelys_http.a $(SYSTEM_LIB) -pthread -o $@
 
 $(BUILD)/test_transport_posix: tests/test_transport_posix.c \
 	$(BUILD)/libmaelys_http_client.a $(BUILD)/libmaelys_http.a $(SYSTEM_LIB)
-	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libmaelys_http_client.a \
+	$(CC) $(MAELYS_CPPFLAGS) $(CFLAGS) $< $(BUILD)/libmaelys_http_client.a \
 		$(BUILD)/libmaelys_http.a $(SYSTEM_LIB) -pthread -o $@
 
 $(BUILD)/test_resolver_internal: tests/test_resolver_internal.c \
 	$(BUILD)/libmaelys_http_client.a $(BUILD)/libmaelys_http.a $(SYSTEM_LIB)
-	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libmaelys_http_client.a \
+	$(CC) $(MAELYS_CPPFLAGS) $(CFLAGS) $< $(BUILD)/libmaelys_http_client.a \
 		$(BUILD)/libmaelys_http.a $(SYSTEM_LIB) -pthread -o $@
 
 $(BUILD)/test_tls_provider: tests/test_tls_provider.c $(BUILD)/libmaelys_http.a
-	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libmaelys_http.a -o $@
+	$(CC) $(MAELYS_CPPFLAGS) $(CFLAGS) $< $(BUILD)/libmaelys_http.a -o $@
 
 $(BUILD)/header_cpp: tests/header_cpp.cpp
-	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $< -c -o $(BUILD)/header_cpp.o
+	$(CXX) $(MAELYS_CPPFLAGS) $(CXXFLAGS) $< -c -o $(BUILD)/header_cpp.o
 	$(CXX) $(BUILD)/header_cpp.o -o $@
 
 $(SYSTEM_LIB):
@@ -112,7 +115,10 @@ check-version:
 	@grep -Fq "## $(VERSION) - " CHANGELOG.md || \
 		{ echo 'CHANGELOG has no entry for $(VERSION)' >&2; exit 1; }
 
-check: check-version test fuzzers
+check-mbedtls-policy:
+	CC="$(CC)" ./scripts/test-mbedtls-version-policy.sh
+
+check: check-system-pin check-version check-mbedtls-policy test fuzzers
 	./scripts/audit-boundaries.sh
 	./scripts/audit-symbols.sh
 	./scripts/audit-whitespace.sh
@@ -124,7 +130,7 @@ fuzzers: $(BUILD)/fuzz_request $(BUILD)/fuzz_response \
 fuzz-libfuzzer:
 	mkdir -p $(BUILD)/libfuzzer
 	@for target in request response chunked smuggling; do \
-		$(CC) $(CPPFLAGS) -std=c11 -D_POSIX_C_SOURCE=200809L -O1 -g \
+		$(CC) $(MAELYS_CPPFLAGS) -std=c11 -D_POSIX_C_SOURCE=200809L -O1 -g \
 			-fno-omit-frame-pointer -fsanitize=fuzzer,address,undefined \
 			src/common.c src/parser.c src/message.c src/tls.c \
 			fuzz/fuzz_$$target.c -o $(BUILD)/libfuzzer/fuzz_$$target || exit 1; \
@@ -133,33 +139,33 @@ fuzz-libfuzzer:
 	done
 
 $(BUILD)/fuzz_%: fuzz/fuzz_%.c fuzz/fuzz_driver.c $(BUILD)/libmaelys_http.a
-	$(CC) $(CPPFLAGS) $(CFLAGS) fuzz/fuzz_driver.c $< \
+	$(CC) $(MAELYS_CPPFLAGS) $(CFLAGS) fuzz/fuzz_driver.c $< \
 		$(BUILD)/libmaelys_http.a -o $@
 	$@ fuzz/corpus/$*
 
-sanitizers: $(SYSTEM_LIB)
+sanitizers: check-system-pin $(SYSTEM_LIB)
 	rm -rf $(BUILD)/san
 	mkdir -p $(BUILD)/san
-	$(CC) $(CPPFLAGS) -std=c11 -D_POSIX_C_SOURCE=200809L -O1 -g \
+	$(CC) $(MAELYS_CPPFLAGS) -std=c11 -D_POSIX_C_SOURCE=200809L -O1 -g \
 		-fno-omit-frame-pointer -fsanitize=address,undefined \
 		src/common.c src/parser.c src/message.c tests/test_parser.c \
 		-o $(BUILD)/san/test_parser
 	@if [ "$$(uname -s)" = Darwin ]; then leaks=0; else leaks=1; fi; \
 		ASAN_OPTIONS=detect_leaks=$$leaks $(BUILD)/san/test_parser
-	$(CC) $(CPPFLAGS) -std=c11 -D_POSIX_C_SOURCE=200809L -O1 -g \
+	$(CC) $(MAELYS_CPPFLAGS) -std=c11 -D_POSIX_C_SOURCE=200809L -O1 -g \
 		-fno-omit-frame-pointer -fsanitize=address,undefined \
 		src/common.c src/parser.c src/message.c tests/test_conformance.c \
 		-o $(BUILD)/san/test_conformance
 	@if [ "$$(uname -s)" = Darwin ]; then leaks=0; else leaks=1; fi; \
 		ASAN_OPTIONS=detect_leaks=$$leaks $(BUILD)/san/test_conformance \
 			conformance/response-wire-cases.txt
-	$(CC) $(CPPFLAGS) -std=c11 -D_POSIX_C_SOURCE=200809L -O1 -g \
+	$(CC) $(MAELYS_CPPFLAGS) -std=c11 -D_POSIX_C_SOURCE=200809L -O1 -g \
 		-fno-omit-frame-pointer -fsanitize=address,undefined \
 		src/common.c src/parser.c src/message.c tests/test_message.c \
 		-o $(BUILD)/san/test_message
 	@if [ "$$(uname -s)" = Darwin ]; then leaks=0; else leaks=1; fi; \
 		ASAN_OPTIONS=detect_leaks=$$leaks $(BUILD)/san/test_message
-	$(CC) $(CPPFLAGS) -std=c11 -D_POSIX_C_SOURCE=200809L -O1 -g \
+	$(CC) $(MAELYS_CPPFLAGS) -std=c11 -D_POSIX_C_SOURCE=200809L -O1 -g \
 		-fno-omit-frame-pointer -fsanitize=address,undefined \
 		src/common.c src/parser.c src/message.c src/tls.c src/client.c \
 		src/resolver.c providers/resolver_posix.c providers/transport_posix.c \
@@ -167,7 +173,7 @@ sanitizers: $(SYSTEM_LIB)
 		-o $(BUILD)/san/test_client
 	@if [ "$$(uname -s)" = Darwin ]; then leaks=0; else leaks=1; fi; \
 		ASAN_OPTIONS=detect_leaks=$$leaks $(BUILD)/san/test_client
-	$(CC) $(CPPFLAGS) -std=c11 -D_POSIX_C_SOURCE=200809L -O1 -g \
+	$(CC) $(MAELYS_CPPFLAGS) -std=c11 -D_POSIX_C_SOURCE=200809L -O1 -g \
 		-fno-omit-frame-pointer -fsanitize=address,undefined \
 		src/common.c src/parser.c src/message.c src/tls.c src/client.c \
 		src/resolver.c providers/resolver_posix.c providers/transport_posix.c \
@@ -175,7 +181,7 @@ sanitizers: $(SYSTEM_LIB)
 		$(SYSTEM_LIB) -pthread -o $(BUILD)/san/test_transport_posix
 	@if [ "$$(uname -s)" = Darwin ]; then leaks=0; else leaks=1; fi; \
 		ASAN_OPTIONS=detect_leaks=$$leaks $(BUILD)/san/test_transport_posix
-	$(CC) $(CPPFLAGS) -std=c11 -D_POSIX_C_SOURCE=200809L -O1 -g \
+	$(CC) $(MAELYS_CPPFLAGS) -std=c11 -D_POSIX_C_SOURCE=200809L -O1 -g \
 		-fno-omit-frame-pointer -fsanitize=address,undefined \
 		src/common.c src/parser.c src/message.c src/tls.c src/client.c \
 		src/resolver.c providers/resolver_posix.c providers/transport_posix.c \
@@ -184,10 +190,10 @@ sanitizers: $(SYSTEM_LIB)
 	@if [ "$$(uname -s)" = Darwin ]; then leaks=0; else leaks=1; fi; \
 		ASAN_OPTIONS=detect_leaks=$$leaks $(BUILD)/san/test_resolver_internal
 
-tsan: $(SYSTEM_LIB)
+tsan: check-system-pin $(SYSTEM_LIB)
 	rm -rf $(BUILD)/tsan
 	mkdir -p $(BUILD)/tsan
-	$(CC) $(CPPFLAGS) -std=c11 -D_POSIX_C_SOURCE=200809L -O1 -g \
+	$(CC) $(MAELYS_CPPFLAGS) -std=c11 -D_POSIX_C_SOURCE=200809L -O1 -g \
 		-fno-omit-frame-pointer -fsanitize=thread \
 		src/common.c src/parser.c src/message.c src/tls.c src/client.c \
 		src/resolver.c providers/resolver_posix.c providers/transport_posix.c \
@@ -195,7 +201,7 @@ tsan: $(SYSTEM_LIB)
 		-o $(BUILD)/tsan/test_client
 	TSAN_OPTIONS=halt_on_error=1:second_deadlock_stack=1 \
 		$(BUILD)/tsan/test_client
-	$(CC) $(CPPFLAGS) -std=c11 -D_POSIX_C_SOURCE=200809L -O1 -g \
+	$(CC) $(MAELYS_CPPFLAGS) -std=c11 -D_POSIX_C_SOURCE=200809L -O1 -g \
 		-fno-omit-frame-pointer -fsanitize=thread \
 		src/common.c src/parser.c src/message.c src/tls.c src/client.c \
 		src/resolver.c providers/resolver_posix.c providers/transport_posix.c \
@@ -214,16 +220,18 @@ check-mbedtls: all
 		if [ "$(REQUIRE_MBEDTLS)" = 1 ]; then echo 'ERROR: mbedTLS is required'; exit 1; fi; \
 		echo 'SKIP: mbedTLS pkg-config modules unavailable'; exit 0; \
 	fi; \
-	$(CC) $(CPPFLAGS) $(CFLAGS) $$cflags -c providers/tls_mbedtls.c \
+	$(CC) $(MAELYS_INTERNAL_CPPFLAGS) $$cflags $(CPPFLAGS) $(CFLAGS) \
+		-c providers/tls_mbedtls.c \
 		-o $(BUILD)/tls_mbedtls.o; \
 	ZERO_AR_DATE=1 $(AR) rcs $(BUILD)/libmaelys_http_tls_mbedtls.a $(BUILD)/tls_mbedtls.o; \
 	$(RANLIB) $(BUILD)/libmaelys_http_tls_mbedtls.a; \
-	$(CC) $(CPPFLAGS) $(CFLAGS) $$cflags tests/test_tls_mbedtls.c \
+	$(CC) $(MAELYS_INTERNAL_CPPFLAGS) $$cflags $(CPPFLAGS) $(CFLAGS) \
+		tests/test_tls_mbedtls.c \
 		$(BUILD)/libmaelys_http_tls_mbedtls.a $(BUILD)/libmaelys_http.a \
 		$$libs -pthread -o $(BUILD)/test_tls_mbedtls; \
 	$(BUILD)/test_tls_mbedtls
 
-tls-integration: check-mbedtls $(SYSTEM_LIB)
+tls-integration: check-system-pin check-mbedtls $(SYSTEM_LIB)
 	@if ! pkg-config --exists mbedtls mbedx509 mbedcrypto; then \
 		if [ "$(REQUIRE_MBEDTLS)" = 1 ]; then \
 			echo 'ERROR: Mbed TLS integration dependencies unavailable'; exit 1; \
@@ -232,7 +240,8 @@ tls-integration: check-mbedtls $(SYSTEM_LIB)
 	else \
 		cflags="$$(pkg-config --cflags mbedtls mbedx509 mbedcrypto)"; \
 		libs="$$(pkg-config --libs mbedtls mbedx509 mbedcrypto)"; \
-		$(CC) $(CPPFLAGS) $(CFLAGS) $$cflags tests/tls_integration_client.c \
+		$(CC) $(MAELYS_INTERNAL_CPPFLAGS) $$cflags $(CPPFLAGS) $(CFLAGS) \
+			tests/tls_integration_client.c \
 			$(BUILD)/libmaelys_http_tls_mbedtls.a \
 			$(BUILD)/libmaelys_http_client.a $(BUILD)/libmaelys_http.a \
 			$(SYSTEM_LIB) $$libs -pthread -o $(BUILD)/tls_integration_client && \
@@ -266,6 +275,7 @@ install-mbedtls: check-mbedtls install
 	install -m 0644 $(BUILD)/libmaelys_http_tls_mbedtls.a \
 		$(DESTDIR)$(PREFIX)/lib/
 	sed -e 's|@PREFIX@|$(PREFIX)|g' -e 's|@VERSION@|$(VERSION)|g' \
+		-e 's|@MBEDTLS_MIN_VERSION@|$(MBEDTLS_PKGCONFIG_MIN_VERSION)|g' \
 		pkgconfig/maelys-http-tls-mbedtls.pc.in > \
 		$(DESTDIR)$(PREFIX)/lib/pkgconfig/maelys-http-tls-mbedtls.pc
 
@@ -293,6 +303,12 @@ package-reproducibility-check:
 
 package-homebrew:
 	./scripts/render-homebrew-formula.sh
+
+package-sbom: package-reproducibility-check
+	./scripts/generate-sbom.sh $(VERSION)
+
+package-archive-check: package-sbom
+	./scripts/test-release-archive.sh $(VERSION) $(SYSTEM_DIR)
 
 clean:
 	rm -rf $(BUILD) dist

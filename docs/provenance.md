@@ -1,8 +1,9 @@
 # Provenance
 
-Maelys HTTP is an independent MPL-2.0 implementation informed by two
-Maelys codebases that were MIT-licensed when studied. It does not link either product and does not
-import their product policy.
+Maelys HTTP is an independent MPL-2.0 implementation informed by two Maelys
+codebases. The original revisions studied were MIT-licensed; the latest Egress
+comparison is MPL-2.0. It does not link either product and does not import
+their product policy.
 
 ## MCP parser and corpus
 
@@ -25,11 +26,14 @@ route, media type, authentication, JSON-RPC and status policy remain outside.
   `include/maelys/egress_tls.h`, `providers/tls_mbedtls.c`, and tests.
 - HTTP parser introduction commit: `6369c61` (23 August 2026), later evolved
   through `6272c5c`.
-- License: MIT, Copyright (c) 2026 Maelys Developers.
+- Current defensive comparison: `af102f2` (6 September 2026).
+- License: the revisions through `6272c5c` were MIT; the current comparison is
+  MPL-2.0, Copyright (c) 2026 Maelys Developers.
 
-Reused ideas are hostile proxy cases, an opaque nonblocking TLS provider with
-WANT_READ/WANT_WRITE, SNI/hostname verification, and a separately linked TLS
-module. CONNECT, absolute-form routing, proxy credentials, principals,
+Reused ideas are hostile proxy cases and generic request-target regression
+vectors, an opaque nonblocking TLS provider with WANT_READ/WANT_WRITE,
+SNI/hostname verification, and a separately linked TLS module. Proxy
+authentication, Host/authority policy, header rewriting, principals,
 allowlists and relay policy remain outside.
 
 ## Maelys System dependency

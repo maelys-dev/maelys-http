@@ -10,7 +10,7 @@ extern "C" {
 
 /*
  * POSIX connector for HTTP and HTTPS. Socket lifecycle, connect, partial I/O
- * and shutdown use the opaque maelys-system 0.5 socket API. Address order,
+ * and shutdown use the opaque maelys-system 0.9 socket API. Address order,
  * retry and TLS remain HTTP transport policy. The default resolver is the
  * explicitly compatibility-only bounded getaddrinfo provider: exchange
  * cancellation is memory-safe but cannot interrupt the OS/NSS call.

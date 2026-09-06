@@ -293,9 +293,17 @@ name: a 101 completes at the headers; upgraded-protocol bytes are excess
 expect: accept none status=101 excess=7
 wire: HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n\r\n\x81\x05hello
 
-name: Content-Length on a 204 does not resurrect a body; the bytes are excess
-expect: accept none status=204 excess=5
+name: Content-Length on a 204 is forbidden and cannot seed a later response
+expect: reject FRAMING
 wire: HTTP/1.1 204 No Content\r\nContent-Length: 5\r\n\r\nhello
+
+name: Transfer-Encoding on a 204 is forbidden even with the bare chunked token
+expect: reject FRAMING
+wire: HTTP/1.1 204 No Content\r\nTransfer-Encoding: chunked\r\n\r\n0\r\n\r\n
+
+name: Content-Length on an informational response is forbidden
+expect: reject FRAMING
+wire: HTTP/1.1 100 Continue\r\nContent-Length: 0\r\n\r\n
 
 name: Transfer-Encoding on a 304 is ignored for framing; chunks become excess
 expect: accept none status=304 excess=15
@@ -305,8 +313,8 @@ name: a 204 still validates Content-Length grammar before ignoring it
 expect: reject FRAMING
 wire: HTTP/1.1 204 No Content\r\nContent-Length: abc\r\n\r\n
 
-name: a bodiless 204 skips the body budget check on its ignored length
-expect: accept none status=204
+name: a bodiless 204 rejects a length before considering the body budget
+expect: reject FRAMING
 wire: HTTP/1.1 204 No Content\r\nContent-Length: 67108865\r\n\r\n
 
 # ====================================== chunked body framing

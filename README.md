@@ -44,11 +44,19 @@ make -C maelys-http check SYSTEM_DIR=../maelys-system
 make -C maelys-http sanitizers SYSTEM_DIR=../maelys-system
 ```
 
-The Mbed TLS module is optional:
+The Mbed TLS module is optional. Its security floor is Mbed TLS 3.6.7 or
+4.1.2 within the maintained major lines:
 
 ```sh
 make check-mbedtls
 ```
+
+A distribution that keeps an older upstream version number while backporting
+all applicable security fixes must opt in explicitly with
+`CPPFLAGS=-DMAELYS_HTTP_MBEDTLS_ALLOW_BACKPORTED_SECURITY_FIXES=1` and set
+`MBEDTLS_PKGCONFIG_MIN_VERSION` to its patched package version when installing.
+The exception only lowers the patch floor on the 3.6 and 4.1 lines; it does not
+re-enable obsolete major or minor releases.
 
 See [architecture](docs/architecture.md), [security model](docs/security-model.md),
 [client contract](docs/client.md),

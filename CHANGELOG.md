@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.1.6 - 2026-09-06
+
+### Security
+
+- Reject forbidden `Content-Length` and `Transfer-Encoding` fields on 1xx and
+  204 responses before a connection can be reused.
+- Enforce maintained Mbed TLS security floors at compile time and client
+  creation, with an explicit and narrowly scoped acknowledgement for
+  distribution-backported fixes.
+- Verify release tag and commit authenticity, promote the exact tested archive,
+  and publish SPDX SBOM, provenance and offline Sigstore bundles.
+
+### Changed
+
+- Put repository and pinned-dependency headers before environment include paths
+  and make the dependency-pin check part of normal and sanitizer validation.
+- Add generic absolute-form, CONNECT, bare-CR and unbracketed-IPv6 request
+  regressions adapted from the current Maelys Egress parser tests.
+- Align stale System boundary documentation with the pinned 0.9.0 dependency.
+
 ## 0.1.5 - 2026-09-05
 
 ### Fixed
