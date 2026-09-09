@@ -42,7 +42,8 @@ The H2 client consumes the Maelys System 0.9 socket, descriptor wait, wakeup
 and deadline APIs. System remains ABI 1. The signed
 `v0.9.1` release commit
 `6663c83a5f6035055b72d3ad0067ac2ad306fc2e` is recorded in
-`deps/MAELYS_SYSTEM_PIN`, the Makefile and CI. No internal System symbol is
+`dependencies/maelys-system.pin`, which the Makefile, the SBOM and every
+checkout read. No internal System symbol is
 consumed.
 
 The source attributions above are retained even though the new implementation

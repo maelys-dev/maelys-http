@@ -1,0 +1,11 @@
+# System packages the build needs on the release and CI runners, read by
+# maelys-release adopt (apt names under [linux], brew names under [macos]).
+# Mbed TLS is not listed for Linux: the security floor in
+# providers/mbedtls_version_policy.h is above what the distribution ships,
+# so CI builds a pinned upstream commit instead.
+[linux]
+pkg-config
+cmake
+[macos]
+pkg-config
+mbedtls

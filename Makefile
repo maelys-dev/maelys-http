@@ -14,8 +14,12 @@ FUZZ_TARGETS := request response chunked smuggling
 FUZZ_RUNS ?= 10000
 FUZZ_MAX_LEN ?= 65536
 SYSTEM_DIR ?= ../maelys-system
-SYSTEM_PIN := 6663c83a5f6035055b72d3ad0067ac2ad306fc2e
-SYSTEM_REQUIRED_VERSION := 0.9.1
+# dependencies/maelys-system.pin is the single declaration of the dependency,
+# in the maelys-release socle's format: the nearest tag on line 1 for humans,
+# the pinned commit on line 2. The Makefile, the SBOM and the CI checkout all
+# read it, so a re-pin is one edit.
+SYSTEM_PIN := $(shell sed -n '2p' dependencies/maelys-system.pin)
+SYSTEM_REQUIRED_VERSION := $(patsubst v%,%,$(shell sed -n '1p' dependencies/maelys-system.pin))
 SYSTEM_LIB := $(SYSTEM_DIR)/build/release/lib/libmaelys_sys.a
 
 MAELYS_INTERNAL_CPPFLAGS = -Iinclude -Isrc -I$(SYSTEM_DIR)/include
@@ -272,8 +276,8 @@ tls-integration: check-system-pin check-mbedtls $(SYSTEM_LIB)
 	fi
 
 check-system-pin:
-	@test "$$(cat deps/MAELYS_SYSTEM_PIN)" = "$(SYSTEM_PIN)" || \
-		{ echo 'recorded maelys-system pin mismatch'; exit 1; }
+	@printf '%s' "$(SYSTEM_PIN)" | grep -Eq '^[0-9a-f]{40}$$' || \
+		{ echo 'dependencies/maelys-system.pin line 2 is not a commit'; exit 1; }
 	@test "$$(sed -n 's/^#define MAELYS_SYS_VERSION "\([^"]*\)"/\1/p' \
 		$(SYSTEM_DIR)/include/maelys/sys/version.h)" = "$(SYSTEM_REQUIRED_VERSION)" || \
 		{ echo "maelys-system $(SYSTEM_REQUIRED_VERSION) is required"; exit 1; }

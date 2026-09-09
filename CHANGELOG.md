@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- Declare the Maelys System dependency the way the maelys-release socle does,
+  as `dependencies/maelys-system.pin` with the nearest tag on line 1 and the
+  pinned commit on line 2, and adopt the socle's managed
+  `scripts/checkout-dependency.sh`. The commit was written out in six places;
+  the Makefile, the SPDX SBOM and all five workflow checkouts now read the one
+  declaration, so a re-pin is a single edit. `deps/MAELYS_SYSTEM_PIN` is gone.
+- Declare the runner packages in `dependencies/packages`, which the socle
+  reads. Mbed TLS is deliberately absent from the Linux section: the floor in
+  `providers/mbedtls_version_policy.h` is above what the distribution ships,
+  so CI keeps building a pinned upstream commit.
+
 ## 0.1.9 - 2026-09-09
 
 ### Fixed
