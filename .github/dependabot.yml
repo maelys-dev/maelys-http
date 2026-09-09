@@ -1,0 +1,21 @@
+version: 2
+updates:
+  # The only ecosystem this repository exposes. Its C dependencies are pinned
+  # by commit and built from source, so no manifest describes them: Maelys
+  # System is a checkout at the commit named in deps/MAELYS_SYSTEM_PIN, and
+  # Mbed TLS is built from a pinned Mbed-TLS/mbedtls commit or comes from the
+  # host. Both are raised deliberately, with the security floors in
+  # providers/mbedtls_version_policy.h as the gate.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: "ci"
+    labels: []
+    # Actions are pinned by commit with the version in a trailing comment.
+    # Dependabot rewrites both, so a bump stays reviewable as a diff.
+    groups:
+      actions:
+        patterns:
+          - "*"
