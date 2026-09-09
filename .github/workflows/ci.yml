@@ -14,7 +14,7 @@ permissions:
 
 jobs:
   check:
-    uses: maelys-dev/maelys-release/.github/workflows/check-product.yml@638edc7d39ba1283a6498f259d68052b02a3702a # v0.21.0
+    uses: maelys-dev/maelys-release/.github/workflows/check-product.yml@f9a5b8454f78e9c18a20d157a94319a265b22881 # v0.21.1
     with:
       product: maelys-http
       check_command: make check install-check
