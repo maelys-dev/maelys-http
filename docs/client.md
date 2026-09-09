@@ -56,9 +56,12 @@ validated `(scheme, authority, origin-form target)` tuple. No transport open,
 DNS lookup or connection for the new authority occurs until the callback says
 FOLLOW. The supported location forms are absolute HTTP(S) URI, network-path
 reference (`//authority/path`) and absolute-path reference (`/path`). Other
-relative references (`next`, `../next`) are rejected; query-only references are
-also rejected. This is an explicit HTTP/1.1 client subset, not a full RFC 3986
-URI resolver.
+relative references (`next`, `../next`) are not followed; query-only references
+are not either. This is an explicit HTTP/1.1 client subset, not a full RFC 3986
+URI resolver. A `Location` outside that subset, or one whose authority the
+client refuses, leaves the redirect unfollowed and the response is delivered
+like a 3xx with no `Location`: the callback is never offered a destination the
+client could not resolve. Two `Location` fields remain a framing error.
 
 The client generates exactly one `Host` header from the validated authority.
 Callers cannot add `Host`, framing (`Content-Length`, `Transfer-Encoding`) or

@@ -1095,7 +1095,15 @@ static maelys_http_result_t maybe_redirect(maelys_http_exchange_t *exchange) {
     }
     if (location_count != 1u) return MAELYS_HTTP_ERR_FRAMING;
     result = parse_location(exchange, location.value, &scheme, &authority, &target);
-    if (result != MAELYS_HTTP_OK) return result;
+    if (result != MAELYS_HTTP_OK) {
+        /* A Location this client cannot resolve is not a destination it can
+         * put to the policy, and nothing is dialled for it. The response is
+         * delivered like a 3xx carrying no Location at all, so the caller
+         * still sees the status and the header and decides for itself,
+         * instead of losing the response to a syntax error. */
+        exchange->redirect_checked = 1;
+        return MAELYS_HTTP_OK;
+    }
     old_authority.data = exchange->request.authority;
     old_authority.length = strlen(exchange->request.authority);
     new_scheme.data = scheme; new_scheme.length = strlen(scheme);
