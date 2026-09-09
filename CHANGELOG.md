@@ -47,6 +47,11 @@
 
 ## 0.1.6 - 2026-09-06
 
+No artifact was published under this version and its tag has been removed: the
+release run failed after the gates, on the whitespace audit inside the source
+archive. Everything below reached the public in 0.1.7, which carries the fix
+for that audit.
+
 ### Security
 
 - Reject forbidden `Content-Length` and `Transfer-Encoding` fields on 1xx and
