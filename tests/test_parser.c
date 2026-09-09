@@ -476,6 +476,90 @@ static int test_chunk_extension_grammar(void) {
     return 0;
 }
 
+/* max_chunk_line_bytes bounds one chunk line, never their sum: a data chunk
+ * carries at least one body octet, so a peer could pad every chunk of a
+ * body-sized stream with extensions the recipient must ignore. The total is
+ * now held to the header-block budget, while the size lines stay unmetered so
+ * a long stream of small chunks is unaffected. */
+static int test_chunk_extension_budget(void) {
+    static const char prefix[] =
+        "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n";
+    static const char padded[] = "1;p=abcdefgh\r\na\r\n";
+    static const char bare[] = "1\r\na\r\n";
+    maelys_http_limits_t limits;
+    maelys_http_parser_t *parser = NULL;
+    body_capture_t capture = {{0}, 0u};
+    char wire[512];
+    size_t index;
+    size_t consumed = 0u;
+    int written;
+    int more;
+    maelys_http_limits_default(&limits);
+    /* Each padded line spends 11 extension octets, so the sixth exceeds 64. */
+    limits.max_header_bytes = 64u;
+    written = snprintf(wire, sizeof(wire), "%s", prefix);
+    CHECK(written > 0);
+    for (index = 0u; index < 6u; ++index) {
+        more = snprintf(wire + written, sizeof(wire) - (size_t)written,
+                        "%s", padded);
+        CHECK(more > 0);
+        written += more;
+    }
+    CHECK(maelys_http_parser_create(MAELYS_HTTP_PARSE_RESPONSE, &limits,
+                                    NULL, NULL, &parser) == MAELYS_HTTP_OK);
+    CHECK(maelys_http_parser_feed(parser, wire, (size_t)written, &consumed) ==
+          MAELYS_HTTP_ERR_LIMIT);
+    maelys_http_parser_release(parser);
+
+    /* Five of them stay inside the budget and the message completes. */
+    parser = NULL;
+    consumed = 0u;
+    written = snprintf(wire, sizeof(wire), "%s", prefix);
+    CHECK(written > 0);
+    for (index = 0u; index < 5u; ++index) {
+        more = snprintf(wire + written, sizeof(wire) - (size_t)written,
+                        "%s", padded);
+        CHECK(more > 0);
+        written += more;
+    }
+    more = snprintf(wire + written, sizeof(wire) - (size_t)written,
+                    "0\r\n\r\n");
+    CHECK(more > 0);
+    written += more;
+    CHECK(maelys_http_parser_create(MAELYS_HTTP_PARSE_RESPONSE, &limits,
+                                    capture_body, &capture,
+                                    &parser) == MAELYS_HTTP_OK);
+    CHECK(maelys_http_parser_feed(parser, wire, (size_t)written, &consumed) ==
+          MAELYS_HTTP_COMPLETE);
+    CHECK(capture.length == 5u);
+    maelys_http_parser_release(parser);
+
+    /* Chunk lines carrying no extension are never charged to the budget. */
+    parser = NULL;
+    consumed = 0u;
+    capture.length = 0u;
+    written = snprintf(wire, sizeof(wire), "%s", prefix);
+    CHECK(written > 0);
+    for (index = 0u; index < 40u; ++index) {
+        more = snprintf(wire + written, sizeof(wire) - (size_t)written,
+                        "%s", bare);
+        CHECK(more > 0);
+        written += more;
+    }
+    more = snprintf(wire + written, sizeof(wire) - (size_t)written,
+                    "0\r\n\r\n");
+    CHECK(more > 0);
+    written += more;
+    CHECK(maelys_http_parser_create(MAELYS_HTTP_PARSE_RESPONSE, &limits,
+                                    capture_body, &capture,
+                                    &parser) == MAELYS_HTTP_OK);
+    CHECK(maelys_http_parser_feed(parser, wire, (size_t)written, &consumed) ==
+          MAELYS_HTTP_COMPLETE);
+    CHECK(capture.length == 40u);
+    maelys_http_parser_release(parser);
+    return 0;
+}
+
 static int test_body_callback_contract(void) {
     static const char wire[] =
         "HTTP/1.1 200 OK\r\nContent-Length: 1\r\n\r\nx";
@@ -574,6 +658,7 @@ int main(void) {
     CHECK(test_forbidden_connect_response_framing() == 0);
     CHECK(test_adversarial() == 0);
     CHECK(test_chunk_extension_grammar() == 0);
+    CHECK(test_chunk_extension_budget() == 0);
     CHECK(test_body_callback_contract() == 0);
     CHECK(test_limits() == 0);
     puts("test_parser: ok");

@@ -36,7 +36,11 @@
   next write, the exchange fails and the caller decides whether its operation
   is safe to retry.
 - Redirects require an application decision. `Authorization`, `Cookie`, and
-  `Proxy-Authorization` are stripped whenever scheme or authority changes.
+  `Proxy-Authorization` are stripped whenever scheme or authority changes. A
+  `Location` the client cannot resolve is never dialled and never reaches the
+  callback; that response is delivered unfollowed.
+- Chunk extensions are bounded over the whole message by the header-block
+  budget, so a peer cannot spend a kilobyte of wire per useful body octet.
 - The shipped Mbed TLS provider requires an explicit trust anchor, TLS 1.2 or
   newer, verifies both chain and hostname, and rejects transport EOF without
   authenticated `close_notify` when HTTP framing depends on connection close.

@@ -657,6 +657,65 @@ static int test_redirect_deny_precedes_body_replay_policy(void) {
     return 0;
 }
 
+static maelys_http_redirect_decision_t count_and_follow_redirect(
+    void *context, unsigned status, maelys_http_slice_t old_authority,
+    maelys_http_slice_t scheme, maelys_http_slice_t authority,
+    maelys_http_slice_t target, size_t index) {
+    if (context) ++*(size_t *)context;
+    (void)status; (void)old_authority; (void)scheme;
+    (void)authority; (void)target; (void)index;
+    return MAELYS_HTTP_REDIRECT_FOLLOW;
+}
+
+static int expect_location_unfollowed(const char *location) {
+    fake_context_t context = {{0}, 1u, 0u, {{0}}, {0}, 0, 0, 0, 0, 0};
+    maelys_http_transport_t *transport;
+    maelys_http_client_t *client = NULL;
+    maelys_http_request_t *request = NULL;
+    maelys_http_exchange_t *exchange = NULL;
+    capture_t capture = {{0}, 0u};
+    size_t redirect_calls = 0u;
+    char response[256];
+    CHECK(snprintf(response, sizeof(response),
+                   "HTTP/1.1 302 Found\r\nContent-Length: 5\r\n"
+                   "Location: %s\r\n\r\nmoved", location) > 0);
+    context.responses[0] = response;
+    transport = make_transport(&context);
+    CHECK(maelys_http_client_create(transport, NULL, &client) == MAELYS_HTTP_OK);
+    CHECK(maelys_http_request_config_create("GET", "http", "localhost",
+                                            "/", &request) == MAELYS_HTTP_OK);
+    CHECK(maelys_http_request_set_redirect_policy(
+              request, count_and_follow_redirect, &redirect_calls) ==
+          MAELYS_HTTP_OK);
+    CHECK(maelys_http_request_set_response_sink(request, capture_sink,
+                                                &capture) == MAELYS_HTTP_OK);
+    CHECK(maelys_http_exchange_create(client, request, UINT64_MAX, &exchange) ==
+          MAELYS_HTTP_OK);
+    CHECK(run_to_completion(exchange) == 0);
+    CHECK(maelys_http_exchange_status(exchange) == 302u);
+    /* The policy is never offered a destination the client cannot resolve,
+     * and the single available connection proves nothing was dialled for it. */
+    CHECK(redirect_calls == 0u && context.opens == 1u);
+    CHECK(capture.length == 5u && !memcmp(capture.bytes, "moved", 5u));
+    maelys_http_exchange_release(exchange);
+    maelys_http_request_release(request);
+    maelys_http_client_release(client);
+    maelys_http_transport_release(transport);
+    return 0;
+}
+
+/* A Location outside the supported subset, or one whose authority the client
+ * refuses, leaves the redirect unfollowed and the response delivered, as a
+ * 3xx with no Location already was, instead of losing it to a syntax error. */
+static int test_unsupported_location_is_delivered_unfollowed(void) {
+    CHECK(expect_location_unfollowed("../elsewhere") == 0);
+    CHECK(expect_location_unfollowed("next") == 0);
+    CHECK(expect_location_unfollowed("?only=query") == 0);
+    CHECK(expect_location_unfollowed("http://user@cdn.test/blob") == 0);
+    CHECK(expect_location_unfollowed("ftp://cdn.test/blob") == 0);
+    return 0;
+}
+
 static int test_wait_slice_cancel_and_late_deadline(void) {
     fake_context_t context = {{0}, 1u, 0u, {{0}}, {0}, 1, 0, 0, 0, 0};
     maelys_http_transport_t *transport;
@@ -1537,6 +1596,7 @@ int main(void) {
     CHECK(test_interim_response() == 0);
     CHECK(test_backpressure_chunked_request_and_trailers() == 0);
     CHECK(test_redirect_deny_precedes_body_replay_policy() == 0);
+    CHECK(test_unsupported_location_is_delivered_unfollowed() == 0);
     CHECK(test_wait_slice_cancel_and_late_deadline() == 0);
     CHECK(test_minimum_fairness_budget_and_authority() == 0);
     CHECK(test_outgoing_head_limits_before_open() == 0);

@@ -8,6 +8,13 @@
   response to CONNECT, as already done for 1xx and 204. RFC 9110 section 9.3.6
   forbids them identically, and the octets such a field claims are the first
   bytes of the tunnel. A CONNECT response that failed keeps its ordinary body.
+- Bound chunk extensions over the whole message. `max_chunk_line_bytes` bounds
+  one chunk line and never their sum, and a data chunk carries at least one
+  body octet, so a peer could pad every chunk of a body-sized stream with
+  extensions the recipient must ignore and spend a kilobyte of wire per useful
+  octet. Their total is now held to the same budget the header block has. The
+  size lines stay unmetered, so a long-lived chunked or SSE response, which is
+  many small chunks and no extension, is unaffected.
 
 ### Changed
 
@@ -15,6 +22,13 @@
   reset as `ERR_RESET` on the sending side on macOS, where an upload cut by a
   reset was diagnosed as a clean peer close, and stops `fd_wait` from
   reporting a timeout that has not come.
+- A `Location` outside the supported subset, or one whose authority the client
+  refuses, no longer fails the exchange. The redirect is left unfollowed and
+  the response is delivered like a 3xx carrying no `Location` at all, so the
+  caller still sees the status and the header instead of losing the response
+  to a syntax error. The policy callback is never offered a destination the
+  client could not resolve, and nothing is dialled for it. Two `Location`
+  fields remain a framing error.
 
 ### Fixed
 

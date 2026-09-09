@@ -43,6 +43,7 @@ struct maelys_http_parser {
     owned_header_t *trailers;
     size_t trailer_count;
     size_t trailer_bytes;
+    size_t chunk_extension_bytes;
     maelys_http_body_framing_t framing;
     uint64_t content_length;
     uint64_t body_bytes;
@@ -96,6 +97,7 @@ static void clear_message(maelys_http_parser_t *parser) {
     parser->trailers = NULL;
     parser->trailer_count = 0u;
     parser->trailer_bytes = 0u;
+    parser->chunk_extension_bytes = 0u;
     parser->framing = MAELYS_HTTP_BODY_NONE;
     parser->content_length = 0u;
     parser->body_bytes = 0u;
@@ -397,6 +399,7 @@ static maelys_http_result_t headers_complete(maelys_http_parser_t *parser) {
 static maelys_http_result_t parse_chunk_size(maelys_http_parser_t *parser) {
     uint64_t size = 0u;
     size_t index = 0u;
+    size_t extension_start;
     int digits = 0;
     while (index < parser->line_length && parser->line[index] != ';') {
         unsigned char byte = (unsigned char)parser->line[index++];
@@ -410,6 +413,7 @@ static maelys_http_result_t parse_chunk_size(maelys_http_parser_t *parser) {
         digits = 1;
     }
     if (!digits) return fail(parser, MAELYS_HTTP_ERR_SYNTAX);
+    extension_start = index;
     while (index < parser->line_length) {
         size_t token_start;
         if (parser->line[index++] != ';') {
@@ -466,6 +470,19 @@ static maelys_http_result_t parse_chunk_size(maelys_http_parser_t *parser) {
             return fail(parser, MAELYS_HTTP_ERR_SYNTAX);
         }
     }
+    /* max_chunk_line_bytes bounds one chunk line, not their sum. Because a
+     * data chunk carries at least one body octet, a peer may send as many
+     * chunk lines as the body budget allows, each padded with extensions the
+     * recipient must ignore, and spend a kilobyte of wire per useful octet.
+     * Chunk extensions are per-message metadata like headers and trailers, so
+     * their total is held to the same budget the header block already has.
+     * The size lines themselves stay unmetered: a long-lived chunked or SSE
+     * response is many small chunks and no extension at all. */
+    if (parser->line_length - extension_start >
+        parser->limits.max_header_bytes - parser->chunk_extension_bytes) {
+        return fail(parser, MAELYS_HTTP_ERR_LIMIT);
+    }
+    parser->chunk_extension_bytes += parser->line_length - extension_start;
     if (size > parser->limits.max_body_bytes - parser->body_bytes) {
         return fail(parser, MAELYS_HTTP_ERR_LIMIT);
     }
