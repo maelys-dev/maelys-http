@@ -279,12 +279,16 @@ static int expect_reject(const unsigned char *wire, size_t length,
     return 0;
 }
 
-static int expect_response_reject(const char *wire,
+static int expect_response_reject(const char *wire, int response_to_connect,
                                   maelys_http_result_t expected) {
     maelys_http_parser_t *parser = NULL;
     size_t consumed = 0u;
     CHECK(maelys_http_parser_create(MAELYS_HTTP_PARSE_RESPONSE, NULL,
                                     NULL, NULL, &parser) == MAELYS_HTTP_OK);
+    if (response_to_connect) {
+        CHECK(maelys_http_parser_set_response_to_connect(parser, 1) ==
+              MAELYS_HTTP_OK);
+    }
     CHECK(maelys_http_parser_feed(parser, wire, strlen(wire), &consumed) ==
           expected);
     consumed = 0u;
@@ -304,9 +308,53 @@ static int test_forbidden_bodiless_response_framing(void) {
     };
     size_t index;
     for (index = 0u; index < sizeof(wire) / sizeof(wire[0]); ++index) {
-        CHECK(expect_response_reject(wire[index], MAELYS_HTTP_ERR_FRAMING) ==
-              0);
+        CHECK(expect_response_reject(wire[index], 0,
+                                     MAELYS_HTTP_ERR_FRAMING) == 0);
     }
+    return 0;
+}
+
+/* RFC 9110 section 9.3.6 forbids both framing fields on a 2xx response to
+ * CONNECT, exactly as on 1xx and 204. The octets such a field claims are the
+ * first bytes of the tunnel, so the response is refused rather than framed
+ * with the field ignored. */
+static int test_forbidden_connect_response_framing(void) {
+    static const char length_wire[] =
+        "HTTP/1.1 200 Connection Established\r\nContent-Length: 5\r\n\r\nhello";
+    static const char chunked_wire[] =
+        "HTTP/1.1 200 Connection Established\r\n"
+        "Transfer-Encoding: chunked\r\n\r\n0\r\n\r\n";
+    static const char denied_wire[] =
+        "HTTP/1.1 407 Proxy Authentication Required\r\n"
+        "Content-Length: 4\r\n\r\ndeny";
+    body_capture_t capture = {{0}, 0u};
+    maelys_http_parser_t *parser = NULL;
+    size_t consumed = 0u;
+    CHECK(expect_response_reject(length_wire, 1, MAELYS_HTTP_ERR_FRAMING) == 0);
+    CHECK(expect_response_reject(chunked_wire, 1, MAELYS_HTTP_ERR_FRAMING) == 0);
+    /* The same bytes outside CONNECT mode are an ordinary framed body. */
+    CHECK(maelys_http_parser_create(MAELYS_HTTP_PARSE_RESPONSE, NULL,
+                                    capture_body, &capture,
+                                    &parser) == MAELYS_HTTP_OK);
+    CHECK(maelys_http_parser_feed(parser, length_wire,
+                                  sizeof(length_wire) - 1u,
+                                  &consumed) == MAELYS_HTTP_COMPLETE);
+    CHECK(capture.length == 5u && !memcmp(capture.bytes, "hello", 5u));
+    maelys_http_parser_release(parser);
+    /* A CONNECT response that failed carries an ordinary body of its own. */
+    parser = NULL;
+    capture.length = 0u;
+    consumed = 0u;
+    CHECK(maelys_http_parser_create(MAELYS_HTTP_PARSE_RESPONSE, NULL,
+                                    capture_body, &capture,
+                                    &parser) == MAELYS_HTTP_OK);
+    CHECK(maelys_http_parser_set_response_to_connect(parser, 1) ==
+          MAELYS_HTTP_OK);
+    CHECK(maelys_http_parser_feed(parser, denied_wire,
+                                  sizeof(denied_wire) - 1u,
+                                  &consumed) == MAELYS_HTTP_COMPLETE);
+    CHECK(capture.length == 4u && !memcmp(capture.bytes, "deny", 4u));
+    maelys_http_parser_release(parser);
     return 0;
 }
 
@@ -523,6 +571,7 @@ int main(void) {
     CHECK(test_close_delimited_and_head() == 0);
     CHECK(test_responses_without_message_body() == 0);
     CHECK(test_forbidden_bodiless_response_framing() == 0);
+    CHECK(test_forbidden_connect_response_framing() == 0);
     CHECK(test_adversarial() == 0);
     CHECK(test_chunk_extension_grammar() == 0);
     CHECK(test_body_callback_contract() == 0);

@@ -2,8 +2,12 @@
 set -eu
 
 version="${1:?version required}"
+system_version="${2:?maelys-system version required}"
 case "$version" in
     *[!0-9A-Za-z.-]*|'') echo 'invalid version' >&2; exit 1 ;;
+esac
+case "$system_version" in
+    *[!0-9A-Za-z.-]*|'') echo 'invalid maelys-system version' >&2; exit 1 ;;
 esac
 
 archive="dist/maelys-http-$version.tar.gz"
@@ -62,7 +66,7 @@ cat >"$sbom" <<EOF
     {
       "name": "maelys-system",
       "SPDXID": "SPDXRef-Package-maelys-system",
-      "versionInfo": "0.9.0",
+      "versionInfo": "$system_version",
       "downloadLocation": "https://github.com/maelys-dev/maelys-system/archive/$system_pin.tar.gz",
       "filesAnalyzed": false,
       "licenseConcluded": "MPL-2.0",
@@ -73,7 +77,8 @@ cat >"$sbom" <<EOF
     {
       "name": "Mbed TLS",
       "SPDXID": "SPDXRef-Package-mbedtls",
-      "versionInfo": "3.6.7+ or 4.1.2+ within supported major lines",
+      "versionInfo": "NOASSERTION",
+      "comment": "Optional, resolved by the consumer. The build and the client constructor refuse anything below 3.6.7 in the 3.x line or 4.1.2 in the 4.x line.",
       "downloadLocation": "https://github.com/Mbed-TLS/mbedtls",
       "filesAnalyzed": false,
       "licenseConcluded": "NOASSERTION",
@@ -104,5 +109,6 @@ EOF
 
 python3 -m json.tool "$sbom" >/dev/null
 grep -Fq "\"checksumValue\": \"$archive_sha256\"" "$sbom"
+grep -Fq "\"versionInfo\": \"$system_version\"" "$sbom"
 grep -Fq "$system_pin" "$sbom"
 echo "$sbom"

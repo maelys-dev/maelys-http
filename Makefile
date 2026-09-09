@@ -11,8 +11,8 @@ DESTDIR ?=
 REQUIRE_MBEDTLS ?= 0
 MBEDTLS_PKGCONFIG_MIN_VERSION ?= 3.6.7
 SYSTEM_DIR ?= ../maelys-system
-SYSTEM_PIN := 6bd51950c83eaad9ec16cbac318549ab9bb2e928
-SYSTEM_REQUIRED_VERSION := 0.9.0
+SYSTEM_PIN := 6663c83a5f6035055b72d3ad0067ac2ad306fc2e
+SYSTEM_REQUIRED_VERSION := 0.9.1
 SYSTEM_LIB := $(SYSTEM_DIR)/build/release/lib/libmaelys_sys.a
 
 MAELYS_INTERNAL_CPPFLAGS = -Iinclude -Isrc -I$(SYSTEM_DIR)/include
@@ -305,7 +305,7 @@ package-homebrew:
 	./scripts/render-homebrew-formula.sh
 
 package-sbom: package-reproducibility-check
-	./scripts/generate-sbom.sh $(VERSION)
+	./scripts/generate-sbom.sh $(VERSION) $(SYSTEM_REQUIRED_VERSION)
 
 package-archive-check: package-sbom
 	./scripts/test-release-archive.sh $(VERSION) $(SYSTEM_DIR)
