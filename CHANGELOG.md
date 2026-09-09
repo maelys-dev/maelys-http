@@ -1,5 +1,27 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- libFuzzer no longer writes into the committed fuzz corpus. It saves what it
+  discovers into the first corpus directory it is given, and that was the one
+  in the source tree, so a local campaign left the checkout dirty. The
+  writable corpus is now in the build tree and the seeds are only ever read,
+  as Egress and OCI already did.
+
+### Changed
+
+- Move `fuzz/` to `tests/fuzz/`, the layout Egress and OCI use, and add a
+  README covering the entry points, the seed corpus, the campaign budget and
+  the absent libFuzzer runtime on Apple Clang.
+- Replay the fuzz seeds under ASan and UBSan in `make sanitizers`. That is the
+  deepest fuzz gate a host without libFuzzer can run, and `make check` only
+  replayed them uninstrumented.
+- Raise the default libFuzzer budget to 10000 runs per entry point, matching
+  Egress, and bound generated inputs to 65536 octets, matching OCI. Both are
+  overridable through `FUZZ_RUNS` and `FUZZ_MAX_LEN` for a longer campaign.
+
 ## 0.1.8 - 2026-09-09
 
 ### Security
