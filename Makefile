@@ -10,6 +10,9 @@ PREFIX ?= /usr/local
 DESTDIR ?=
 REQUIRE_MBEDTLS ?= 0
 MBEDTLS_PKGCONFIG_MIN_VERSION ?= 3.6.7
+FUZZ_TARGETS := request response chunked smuggling
+FUZZ_RUNS ?= 10000
+FUZZ_MAX_LEN ?= 65536
 SYSTEM_DIR ?= ../maelys-system
 SYSTEM_PIN := 6663c83a5f6035055b72d3ad0067ac2ad306fc2e
 SYSTEM_REQUIRED_VERSION := 0.9.1
@@ -127,21 +130,30 @@ check: check-system-pin check-version check-mbedtls-policy test fuzzers
 fuzzers: $(BUILD)/fuzz_request $(BUILD)/fuzz_response \
 	$(BUILD)/fuzz_chunked $(BUILD)/fuzz_smuggling
 
+# libFuzzer writes what it discovers into the FIRST corpus directory it is
+# given, so that one lives in the build tree and the committed seeds are only
+# ever read. Budget and input size are overridable for a longer campaign:
+# make fuzz-libfuzzer FUZZ_RUNS=1000000
 fuzz-libfuzzer:
 	mkdir -p $(BUILD)/libfuzzer
-	@for target in request response chunked smuggling; do \
+	@for target in $(FUZZ_TARGETS); do \
 		$(CC) $(MAELYS_CPPFLAGS) -std=c11 -D_POSIX_C_SOURCE=200809L -O1 -g \
 			-fno-omit-frame-pointer -fsanitize=fuzzer,address,undefined \
 			src/common.c src/parser.c src/message.c src/tls.c \
-			fuzz/fuzz_$$target.c -o $(BUILD)/libfuzzer/fuzz_$$target || exit 1; \
-		$(BUILD)/libfuzzer/fuzz_$$target -runs=1000 fuzz/corpus/$$target \
+			tests/fuzz/fuzz_$$target.c \
+			-o $(BUILD)/libfuzzer/fuzz_$$target || exit 1; \
+		mkdir -p $(BUILD)/libfuzzer/corpus/$$target || exit 1; \
+		$(BUILD)/libfuzzer/fuzz_$$target \
+			$(BUILD)/libfuzzer/corpus/$$target tests/fuzz/corpus/$$target \
+			-runs=$(FUZZ_RUNS) -max_len=$(FUZZ_MAX_LEN) \
 			-artifact_prefix=$(BUILD)/libfuzzer/ || exit 1; \
 	done
 
-$(BUILD)/fuzz_%: fuzz/fuzz_%.c fuzz/fuzz_driver.c $(BUILD)/libmaelys_http.a
-	$(CC) $(MAELYS_CPPFLAGS) $(CFLAGS) fuzz/fuzz_driver.c $< \
+$(BUILD)/fuzz_%: tests/fuzz/fuzz_%.c tests/fuzz/fuzz_driver.c \
+	$(BUILD)/libmaelys_http.a
+	$(CC) $(MAELYS_CPPFLAGS) $(CFLAGS) tests/fuzz/fuzz_driver.c $< \
 		$(BUILD)/libmaelys_http.a -o $@
-	$@ fuzz/corpus/$*
+	$@ tests/fuzz/corpus/$*
 
 sanitizers: check-system-pin $(SYSTEM_LIB)
 	rm -rf $(BUILD)/san
@@ -189,6 +201,17 @@ sanitizers: check-system-pin $(SYSTEM_LIB)
 		$(SYSTEM_LIB) -pthread -o $(BUILD)/san/test_resolver_internal
 	@if [ "$$(uname -s)" = Darwin ]; then leaks=0; else leaks=1; fi; \
 		ASAN_OPTIONS=detect_leaks=$$leaks $(BUILD)/san/test_resolver_internal
+	@if [ "$$(uname -s)" = Darwin ]; then leaks=0; else leaks=1; fi; \
+	for target in $(FUZZ_TARGETS); do \
+		$(CC) $(MAELYS_CPPFLAGS) -std=c11 -D_POSIX_C_SOURCE=200809L -O1 -g \
+			-fno-omit-frame-pointer -fsanitize=address,undefined \
+			src/common.c src/parser.c src/message.c src/tls.c \
+			tests/fuzz/fuzz_driver.c tests/fuzz/fuzz_$$target.c \
+			-o $(BUILD)/san/fuzz_$$target || exit 1; \
+		ASAN_OPTIONS=detect_leaks=$$leaks $(BUILD)/san/fuzz_$$target \
+			tests/fuzz/corpus/$$target || exit 1; \
+	done; \
+	echo 'fuzz seed replay under ASan/UBSan: ok'
 
 tsan: check-system-pin $(SYSTEM_LIB)
 	rm -rf $(BUILD)/tsan
