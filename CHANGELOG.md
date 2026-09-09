@@ -1,5 +1,29 @@
 # Changelog
 
+## Unreleased
+
+### Security
+
+- Reject forbidden `Content-Length` and `Transfer-Encoding` fields on a 2xx
+  response to CONNECT, as already done for 1xx and 204. RFC 9110 section 9.3.6
+  forbids them identically, and the octets such a field claims are the first
+  bytes of the tunnel. A CONNECT response that failed keeps its ordinary body.
+
+### Changed
+
+- Pin Maelys System 0.9.1 (`6663c83`, signed tag `v0.9.1`). It reports a peer's
+  reset as `ERR_RESET` on the sending side on macOS, where an upload cut by a
+  reset was diagnosed as a clean peer close, and stops `fd_wait` from
+  reporting a timeout that has not come.
+
+### Fixed
+
+- Take the maelys-system version in the SPDX SBOM from the pinned dependency
+  instead of a hard-coded string, so a re-pin cannot leave the document
+  naming a version the recorded commit does not carry. Mbed TLS, which the
+  consumer resolves, no longer carries a sentence where SPDX expects a
+  version.
+
 ## 0.1.7 - 2026-09-06
 
 ### Fixed

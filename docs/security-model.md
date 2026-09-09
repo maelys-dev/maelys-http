@@ -45,9 +45,11 @@
   a client, preventing a safe build from being downgraded at final link. A
   narrowly scoped override exists only for maintained distribution branches
   carrying backported security fixes.
-- `Content-Length` and `Transfer-Encoding` on 1xx or 204 responses are rejected
-  as framing errors, so forbidden pseudo-bodies cannot survive into a reused
-  connection. HEAD and 304 representation metadata remain accepted.
+- `Content-Length` and `Transfer-Encoding` on 1xx or 204 responses, and on a
+  2xx response to CONNECT, are rejected as framing errors, so forbidden
+  pseudo-bodies cannot survive into a reused connection nor claim the first
+  octets of a tunnel. A CONNECT response that failed carries an ordinary body,
+  and HEAD and 304 representation metadata remain accepted.
 - Secret header values are never included in library diagnostics.
 
 ## Caller responsibilities
