@@ -27,7 +27,7 @@ created_epoch=$(git show -s --format=%ct HEAD)
 created=$(python3 -c \
     'import datetime,sys; print(datetime.datetime.fromtimestamp(int(sys.argv[1]), datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"))' \
     "$created_epoch")
-system_pin=$(sed -n '1p' deps/MAELYS_SYSTEM_PIN)
+system_pin=$(sed -n '2p' dependencies/maelys-system.pin)
 case "$system_pin" in
     *[!0-9a-f]*|'') echo 'invalid maelys-system pin' >&2; exit 1 ;;
 esac

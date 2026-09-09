@@ -39,11 +39,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           path: maelys-http
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          repository: maelys-dev/maelys-system
-          ref: 6663c83a5f6035055b72d3ad0067ac2ad306fc2e
-          path: maelys-system
+      - name: Pinned maelys-system checkout
+        run: sh maelys-http/scripts/checkout-dependency.sh maelys-system
       - name: Build dependency
         run: make -C maelys-system CC=${{ matrix.cc }} CXX=${{ matrix.cxx }}
       - name: Build and test
@@ -57,11 +54,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           path: maelys-http
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          repository: maelys-dev/maelys-system
-          ref: 6663c83a5f6035055b72d3ad0067ac2ad306fc2e
-          path: maelys-system
+      - name: Pinned maelys-system checkout
+        run: sh maelys-http/scripts/checkout-dependency.sh maelys-system
       - run: make -C maelys-system CC=clang
       - run: make -C maelys-http sanitizers CC=clang SYSTEM_DIR=../maelys-system
       - run: make -C maelys-http fuzz-libfuzzer CC=clang SYSTEM_DIR=../maelys-system
@@ -72,11 +66,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           path: maelys-http
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          repository: maelys-dev/maelys-system
-          ref: 6663c83a5f6035055b72d3ad0067ac2ad306fc2e
-          path: maelys-system
+      - name: Pinned maelys-system checkout
+        run: sh maelys-http/scripts/checkout-dependency.sh maelys-system
       - run: make -C maelys-system CC=clang
       - name: Exercise client and concurrent POSIX DNS ownership under TSan
         run: make -C maelys-http tsan CC=clang SYSTEM_DIR=../maelys-system
@@ -93,11 +84,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           path: maelys-http
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          repository: maelys-dev/maelys-system
-          ref: 6663c83a5f6035055b72d3ad0067ac2ad306fc2e
-          path: maelys-system
+      - name: Pinned maelys-system checkout
+        run: sh maelys-http/scripts/checkout-dependency.sh maelys-system
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         if: runner.os == 'Linux'
         with:
