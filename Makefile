@@ -39,8 +39,8 @@ TEST_BINS := $(BUILD)/test_parser $(BUILD)/test_conformance $(BUILD)/test_messag
 	$(BUILD)/test_transport_posix $(BUILD)/test_resolver_internal \
 	$(BUILD)/test_tls_provider $(BUILD)/header_cpp
 
-.PHONY: all clean check check-version check-mbedtls-policy test sanitizers tsan fuzzers \
-	fuzz-libfuzzer install uninstall check-system-pin install-check package \
+.PHONY: all clean check check-version check-mbedtls-policy test sanitizers tsan \
+	fuzz fuzz-smoke install uninstall check-system-pin install-check package \
 	package-homebrew package-reproducibility-check package-sbom package-archive-check \
 	check-mbedtls tls-integration \
 	install-mbedtls
@@ -125,20 +125,24 @@ check-version:
 check-mbedtls-policy:
 	CC="$(CC)" ./scripts/test-mbedtls-version-policy.sh
 
-check: check-system-pin check-version check-mbedtls-policy test fuzzers
+check: check-system-pin check-version check-mbedtls-policy test fuzz-smoke
 	./scripts/audit-boundaries.sh
 	./scripts/audit-symbols.sh
 	./scripts/audit-whitespace.sh
 	./scripts/check-fragmentation.sh
 
-fuzzers: $(BUILD)/fuzz_request $(BUILD)/fuzz_response \
+# The fleet convention: fuzz-smoke replays the committed corpus in seconds
+# and needs no sanitizer runtime, so it runs on every host and inside check;
+# fuzz is the libFuzzer campaign. The corpus stays read-only for both.
+fuzz-smoke: $(BUILD)/fuzz_request $(BUILD)/fuzz_response \
 	$(BUILD)/fuzz_chunked $(BUILD)/fuzz_smuggling
+	@echo 'fuzz seed replay: ok'
 
 # libFuzzer writes what it discovers into the FIRST corpus directory it is
 # given, so that one lives in the build tree and the committed seeds are only
 # ever read. Budget and input size are overridable for a longer campaign:
-# make fuzz-libfuzzer FUZZ_RUNS=1000000
-fuzz-libfuzzer:
+# make fuzz FUZZ_RUNS=1000000
+fuzz:
 	mkdir -p $(BUILD)/libfuzzer
 	@for target in $(FUZZ_TARGETS); do \
 		$(CC) $(MAELYS_CPPFLAGS) -std=c11 -D_POSIX_C_SOURCE=200809L -O1 -g \

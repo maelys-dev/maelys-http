@@ -43,10 +43,13 @@ jobs:
       matrix:
         include:
           - runner: ubuntu-26.04
+            target: linux-x86_64
             release_artifact: true
           - runner: ubuntu-26.04-arm
+            target: linux-arm64
             release_artifact: false
           - runner: macos-15
+            target: macos-arm64
             install: brew install mbedtls
             release_artifact: false
     runs-on: ${{ matrix.runner }}
@@ -56,13 +59,11 @@ jobs:
           fetch-depth: 0
       - name: Pinned maelys-system checkout
         run: sh scripts/checkout-dependency.sh maelys-system maelys-system
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Pinned Mbed TLS checkout (Linux)
         if: runner.os == 'Linux'
-        with:
-          repository: Mbed-TLS/mbedtls
-          ref: 068ff080b369adfac81509f9b57b2afabaf82dc5 # v3.6.7
-          path: mbedtls
-          submodules: recursive
+        run: |
+          sh scripts/checkout-dependency.sh mbedtls mbedtls
+          git -C mbedtls submodule update --init --depth 1
       - name: Build pinned Mbed TLS 3.6.7 (Linux)
         if: runner.os == 'Linux'
         run: |
@@ -78,12 +79,12 @@ jobs:
       - run: ${{ matrix.install }}
         if: runner.os == 'macOS'
       - run: make -C maelys-system clean check CC=clang CXX=clang++
-      - name: Verify source, install and physical TLS lifecycle
-        run: |
-          make clean check install-check \
-            CC=clang CXX=clang++ SYSTEM_DIR=maelys-system
-          make tls-integration REQUIRE_MBEDTLS=1 \
-            CC=clang CXX=clang++ SYSTEM_DIR=maelys-system
+      - name: Replay the gates on the tagged commit
+        env:
+          SYSTEM_DIR: maelys-system
+          CC: clang
+          CXX: clang++
+        run: sh scripts/verify-release.sh ${{ matrix.target }}
       - name: Build the release bytes and SPDX SBOM once
         if: matrix.release_artifact
         run: make package-archive-check package-homebrew SYSTEM_DIR=maelys-system

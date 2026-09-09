@@ -1,5 +1,32 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- Take the maelys-release shared CI while keeping this repository's own
+  release workflow, which socle 0.21.0 made possible. The check job reads
+  `dependencies/*.pin` and `dependencies/packages` itself, performs the
+  pinned checkouts and returns the conventions verdict on three targets; the
+  jobs beside it cover the second compiler on both Linux architectures and
+  the pinned Mbed TLS.
+- Declare Mbed TLS as `dependencies/mbedtls.pin`, with the `repository` line
+  socle 0.21.0 added for a dependency outside `maelys-dev`. Neither pinned
+  commit is written out anywhere else now: both workflows check their
+  dependencies out through `scripts/checkout-dependency.sh`, which reads the
+  pins, and the Mbed TLS submodule is initialised beside it since a pin
+  cannot reach it.
+- Extract the release-time verification into `scripts/verify-release.sh
+  TARGET`, the hook socle 0.21.0 defined. The release workflow calls it on
+  each target instead of carrying the commands inline, so adopting the
+  socle's release later needs no rewriting of what it verifies.
+- Rename the fuzz targets to the fleet convention: `make fuzz` is the
+  libFuzzer campaign and `make fuzz-smoke` replays the committed corpus in
+  seconds without any sanitizer runtime. `make check` depends on the latter
+  and the shared CI runs it as its `fuzz_command`.
+- Adopt the conventions files the socle writes: `AGENTS.md`, `CLAUDE.md` and
+  `LICENSING.md`. `maelys-release check` now passes.
+
 ## 0.1.10 - 2026-09-09
 
 ### Changed

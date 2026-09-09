@@ -1,112 +1,82 @@
 name: CI
 
+# Owned by this repository. The check job is the socle's shared product CI,
+# which reads dependencies/*.pin and dependencies/packages itself and returns
+# the conventions verdict; the jobs beside it are what this product needs on
+# top: the second compiler on each Linux architecture, and the pinned Mbed TLS
+# the distribution does not ship.
 on:
   push:
-    branches:
-      - main
   pull_request:
-
-concurrency:
-  group: maelys-http-ci-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
 
 permissions:
   contents: read
 
 jobs:
-  build:
+  check:
+    uses: maelys-dev/maelys-release/.github/workflows/check-product.yml@638edc7d39ba1283a6498f259d68052b02a3702a # v0.21.0
+    with:
+      product: maelys-http
+      check_command: make check install-check
+      sanitizer_command: |
+        make sanitizers
+        make tsan
+        make fuzz
+      fuzz_command: make fuzz-smoke
+
+  # The shared check builds with the host's default compiler, gcc on Linux and
+  # clang on macOS. This covers the other one on both Linux architectures, so
+  # -Werror is answered by both toolchains.
+  clang:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - runner: ubuntu-26.04
-            cc: gcc
-            cxx: g++
-          - runner: ubuntu-26.04
-            cc: clang
-            cxx: clang++
-          - runner: ubuntu-26.04-arm
-            cc: gcc
-            cxx: g++
-          - runner: ubuntu-26.04-arm
-            cc: clang
-            cxx: clang++
-          - runner: macos-15
-            cc: clang
-            cxx: clang++
+        runner: [ubuntu-26.04, ubuntu-26.04-arm]
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          path: maelys-http
-      - name: Pinned maelys-system checkout
-        run: sh maelys-http/scripts/checkout-dependency.sh maelys-system
-      - name: Build dependency
-        run: make -C maelys-system CC=${{ matrix.cc }} CXX=${{ matrix.cxx }}
+      - name: Pinned dependency checkouts
+        run: sh scripts/checkout-dependency.sh maelys-system
+      - name: Install packages
+        run: sudo apt-get update && sudo apt-get install -y clang pkg-config cmake
       - name: Build and test
-        run: make -C maelys-http clean check install-check check-system-pin package-reproducibility-check CC=${{ matrix.cc }} CXX=${{ matrix.cxx }} SYSTEM_DIR=../maelys-system
+        run: make check install-check CC=clang CXX=clang++
       - name: Architecture
         run: uname -m
-
-  sanitizers:
-    runs-on: ubuntu-26.04
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          path: maelys-http
-      - name: Pinned maelys-system checkout
-        run: sh maelys-http/scripts/checkout-dependency.sh maelys-system
-      - run: make -C maelys-system CC=clang
-      - run: make -C maelys-http sanitizers CC=clang SYSTEM_DIR=../maelys-system
-      - run: make -C maelys-http fuzz-libfuzzer CC=clang SYSTEM_DIR=../maelys-system
-
-  thread-sanitizer:
-    runs-on: ubuntu-26.04
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          path: maelys-http
-      - name: Pinned maelys-system checkout
-        run: sh maelys-http/scripts/checkout-dependency.sh maelys-system
-      - run: make -C maelys-system CC=clang
-      - name: Exercise client and concurrent POSIX DNS ownership under TSan
-        run: make -C maelys-http tsan CC=clang SYSTEM_DIR=../maelys-system
 
   mbedtls:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - runner: ubuntu-26.04
-          - runner: macos-15
+        runner: [ubuntu-26.04, macos-15]
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          path: maelys-http
-      - name: Pinned maelys-system checkout
-        run: sh maelys-http/scripts/checkout-dependency.sh maelys-system
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        if: runner.os == 'Linux'
-        with:
-          repository: Mbed-TLS/mbedtls
-          ref: 068ff080b369adfac81509f9b57b2afabaf82dc5 # v3.6.7
-          path: mbedtls
-          submodules: recursive
-      - name: Build pinned Mbed TLS 3.6.7 (Linux)
+      - name: Pinned dependency checkouts
+        run: sh scripts/checkout-dependency.sh maelys-system
+      # The Linux distribution ships Mbed TLS below the floor that
+      # providers/mbedtls_version_policy.h enforces, so the pinned upstream
+      # commit is built from source. dependencies/mbedtls.pin names it, with
+      # the repository it lives in; its submodule is not in the pin's reach.
+      - name: Pinned Mbed TLS checkout (Linux)
         if: runner.os == 'Linux'
         run: |
-          cmake -S mbedtls -B mbedtls-build \
+          sh scripts/checkout-dependency.sh mbedtls
+          git -C ../mbedtls submodule update --init --depth 1
+      - name: Build pinned Mbed TLS (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          cmake -S ../mbedtls -B ../mbedtls-build \
             -DENABLE_PROGRAMS=OFF -DENABLE_TESTING=OFF \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_INSTALL_PREFIX="$GITHUB_WORKSPACE/mbedtls-prefix"
-          cmake --build mbedtls-build --parallel
-          cmake --install mbedtls-build
+          cmake --build ../mbedtls-build --parallel
+          cmake --install ../mbedtls-build
           test -f "$GITHUB_WORKSPACE/mbedtls-prefix/lib/pkgconfig/mbedtls.pc"
           echo "PKG_CONFIG_PATH=$GITHUB_WORKSPACE/mbedtls-prefix/lib/pkgconfig" \
             >>"$GITHUB_ENV"
       - name: Install Mbed TLS (macOS)
         if: runner.os == 'macOS'
         run: brew install mbedtls
-      - run: make -C maelys-system
-      - run: make -C maelys-http clean tls-integration REQUIRE_MBEDTLS=1 SYSTEM_DIR=../maelys-system
+      - name: Physical TLS lifecycle
+        run: make clean tls-integration REQUIRE_MBEDTLS=1

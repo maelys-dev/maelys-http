@@ -15,21 +15,23 @@ command writes to them.
 
 ## What runs
 
-`make check` builds each entry point against the ordinary library and replays
-the seeds once. It proves the entry points still compile and that no seed
-regressed, nothing more.
+`make fuzz-smoke` builds each entry point against the ordinary library and
+replays the seeds once. It needs no sanitizer runtime and no libFuzzer, so it
+runs on every host, and `make check` depends on it. It proves the entry points
+still compile and that no seed regressed, nothing more. This is the target the
+shared CI runs as its `fuzz_command`.
 
 `make sanitizers` replays the same seeds under ASan and UBSan. This is the
 deepest gate a host without libFuzzer can run.
 
-`make fuzz-libfuzzer` is the campaign: Clang libFuzzer with ASan and UBSan,
+`make fuzz` is the campaign: Clang libFuzzer with ASan and UBSan,
 seeded from the committed corpus and writing everything it discovers to
 `build/libfuzzer/corpus/<target>/`. libFuzzer saves new inputs into the first
 corpus directory it is given, so that one is always in the build tree. The
 budget is deliberately small by default and overridable:
 
 ```sh
-make fuzz-libfuzzer FUZZ_RUNS=1000000
+make fuzz FUZZ_RUNS=1000000
 ```
 
 `FUZZ_MAX_LEN` bounds the generated input size, 65536 by default, which is the
@@ -37,9 +39,9 @@ default cumulative header budget of the parser.
 
 ## macOS
 
-Apple Clang ships no `libclang_rt.fuzzer_osx.a`, so `make fuzz-libfuzzer` fails
-to link there. The mutation-free gates still run: `make check` replays the
-seeds and `make sanitizers` replays them under ASan and UBSan. Run the campaign
+Apple Clang ships no `libclang_rt.fuzzer_osx.a`, so `make fuzz` fails to link
+there. The mutation-free gates still run: `make fuzz-smoke` replays the seeds
+and `make sanitizers` replays them under ASan and UBSan. Run the campaign
 on Linux, or in a container with a Clang that carries the fuzzer runtime.
 
 ## Scope
