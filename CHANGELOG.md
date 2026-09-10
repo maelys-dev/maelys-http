@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- Re-adopt the maelys-release conventions at v0.29.0. The managed `AGENTS.md`
+  and `CLAUDE.md` blocks gain the CC-BY-4.0 attribution of the socle's agent
+  texts, and a bullet naming where this repository's prose lives. Nothing
+  else moved: `maelys-release check` reported every other managed file
+  unchanged before the adoption and passes after it.
+
 ## 0.1.11 - 2026-09-10
 
 ### Changed
