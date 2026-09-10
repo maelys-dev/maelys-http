@@ -26,6 +26,12 @@
   and the shared CI runs it as its `fuzz_command`.
 - Adopt the conventions files the socle writes: `AGENTS.md`, `CLAUDE.md` and
   `LICENSING.md`. `maelys-release check` now passes.
+- Move to socle 0.24.0 and declare the Mbed TLS submodule on a `submodules`
+  line of its pin, which 0.22.0 added after this repository reported that
+  `cmake` refuses to configure without it. The line the workflows carried to
+  fetch it by hand is gone: the managed script alone now leaves a tree that
+  configures. 0.22.1 also stops a broken third-party apt source of the
+  runner image from failing a product's Linux jobs.
 
 ## 0.1.10 - 2026-09-09
 
