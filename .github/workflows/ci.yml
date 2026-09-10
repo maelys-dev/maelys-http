@@ -14,7 +14,7 @@ permissions:
 
 jobs:
   check:
-    uses: maelys-dev/maelys-release/.github/workflows/check-product.yml@f9a5b8454f78e9c18a20d157a94319a265b22881 # v0.21.1
+    uses: maelys-dev/maelys-release/.github/workflows/check-product.yml@d71cb5c0ccc95e0fd253bbe4da0c612806a4a824 # v0.24.0
     with:
       product: maelys-http
       check_command: make check install-check
@@ -56,13 +56,11 @@ jobs:
         run: sh scripts/checkout-dependency.sh maelys-system
       # The Linux distribution ships Mbed TLS below the floor that
       # providers/mbedtls_version_policy.h enforces, so the pinned upstream
-      # commit is built from source. dependencies/mbedtls.pin names it, with
-      # the repository it lives in; its submodule is not in the pin's reach.
+      # commit is built from source. dependencies/mbedtls.pin names it, the
+      # repository it lives in and the submodule its build needs.
       - name: Pinned Mbed TLS checkout (Linux)
         if: runner.os == 'Linux'
-        run: |
-          sh scripts/checkout-dependency.sh mbedtls
-          git -C ../mbedtls submodule update --init --depth 1
+        run: sh scripts/checkout-dependency.sh mbedtls
       - name: Build pinned Mbed TLS (Linux)
         if: runner.os == 'Linux'
         run: |

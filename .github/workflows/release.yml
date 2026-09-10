@@ -61,9 +61,7 @@ jobs:
         run: sh scripts/checkout-dependency.sh maelys-system maelys-system
       - name: Pinned Mbed TLS checkout (Linux)
         if: runner.os == 'Linux'
-        run: |
-          sh scripts/checkout-dependency.sh mbedtls mbedtls
-          git -C mbedtls submodule update --init --depth 1
+        run: sh scripts/checkout-dependency.sh mbedtls mbedtls
       - name: Build pinned Mbed TLS 3.6.7 (Linux)
         if: runner.os == 'Linux'
         run: |
