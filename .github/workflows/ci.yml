@@ -38,7 +38,11 @@ jobs:
       - name: Pinned dependency checkouts
         run: sh scripts/checkout-dependency.sh maelys-system
       - name: Install packages
-        run: sudo apt-get update && sudo apt-get install -y clang pkg-config cmake
+        run: |
+          # A broken third-party apt source of the runner image must not fail an
+          # install of Ubuntu archive packages: the update reports, the install decides.
+          sudo apt-get update || echo "::warning::apt-get update reported errors; the install decides"
+          sudo apt-get install -y clang pkg-config cmake
       - name: Build and test
         run: make check install-check CC=clang CXX=clang++
       - name: Architecture
