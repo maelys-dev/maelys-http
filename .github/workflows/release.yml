@@ -98,7 +98,7 @@ jobs:
             dist/maelys-http-*.tar.gz.sha256
             dist/maelys-http-*.spdx.json
             dist/SHA256SUMS
-            dist/homebrew/maelys-http.rb
+            dist/homebrew/libmaelys-http.rb
           if-no-files-found: error
           compression-level: 0
           retention-days: 7
@@ -162,5 +162,5 @@ jobs:
             dist/maelys-http-*.tar dist/maelys-http-*.tar.sha256 \
             dist/maelys-http-*.tar.gz dist/maelys-http-*.tar.gz.sha256 \
             dist/maelys-http-*.spdx.json dist/maelys-http-*.intoto.jsonl \
-            dist/SHA256SUMS dist/homebrew/maelys-http.rb \
+            dist/SHA256SUMS dist/homebrew/libmaelys-http.rb \
             --verify-tag --generate-notes --title "Maelys HTTP $GITHUB_REF_NAME"

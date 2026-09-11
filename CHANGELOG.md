@@ -4,6 +4,25 @@
 
 ### Changed
 
+- Rename the Homebrew formula to `libmaelys-http`, class `LibmaelysHttp`, as
+  the fleet convention names a library after its archive with a `lib` prefix.
+  `maelys-http` would name a command, and this repository ships none.
+- The formula depended on a formula that does not exist. The tap installs
+  Maelys System as `libmaelys-sys`, so that is what is declared and where the
+  prefix and the static archive are read from.
+- Mbed TLS is no longer optional in the formula. Consumers link
+  `libmaelys_http_tls_mbedtls.a`, so the provider is installed unconditionally
+  and with `REQUIRE_MBEDTLS=1`, which turns a provider pkg-config cannot see
+  into a failure rather than a silent skip installing no TLS archive at all.
+- The formula's test no longer asserts `MAELYS_HTTP_ABI_VERSION` equals a
+  number, which would have failed at the first ABI change. It links the codec,
+  the client and the TLS provider, which is what a consumer does.
+- `scripts/render-homebrew-formula.sh` takes `TAG OUTPUT NAME`, the signature
+  the socle's tap job calls, and copies the pinned Maelys System version from
+  `dependencies/maelys-system.pin` instead of leaving it to be typed. It
+  refuses a checkout whose `VERSION` is not the tag it is asked to render, and
+  refuses an output still carrying a placeholder.
+
 - Re-adopt the maelys-release conventions at v0.29.0. The managed `AGENTS.md`
   and `CLAUDE.md` blocks gain the CC-BY-4.0 attribution of the socle's agent
   texts, and a bullet naming where this repository's prose lives. Nothing
