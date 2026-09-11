@@ -1,5 +1,26 @@
 # Changelog
 
+## Unreleased
+
+### Security
+
+- The list of keys allowed to sign a release tag is read from the default
+  branch, not from the tagged commit. Read from the tag it authorised itself:
+  whoever could push added a key to `.github/release-allowed-signers`, tagged
+  that commit with it, and `verify-tag` passed. Reported by the maelys-release
+  session while reviewing a proposal to bring this mechanism into the socle.
+- A tag whose signature is not SSH is refused. `gpg.ssh.allowedSignersFile`
+  governs SSH signatures only, and git chooses its backend from the signature
+  header rather than from `gpg.format`, so another kind would have bypassed the
+  list instead of being measured against it.
+
+### Added
+
+- `scripts/check-signing-key.sh` answers, before a tag exists, whether this
+  machine can sign one the release will accept. A refused tag is burned: the
+  rule forbids moving a published tag, and no replay passes a signature the
+  list does not name.
+
 ## 0.1.12 - 2026-09-11
 
 ### Changed
