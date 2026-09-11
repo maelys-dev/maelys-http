@@ -82,7 +82,10 @@ jobs:
           SYSTEM_DIR: maelys-system
           CC: clang
           CXX: clang++
-        run: sh scripts/verify-release.sh ${{ matrix.target }}
+        # bash, not sh: the socle found in 0.36.0 that sh is dash on Ubuntu
+        # and bash in POSIX mode on macOS, so a bashism passes on a developer's
+        # machine and fails at the tag, the one moment nothing is cheap to retry.
+        run: bash scripts/verify-release.sh ${{ matrix.target }}
       - name: Build the release bytes and SPDX SBOM once
         if: matrix.release_artifact
         run: make package-archive-check package-homebrew SYSTEM_DIR=maelys-system
