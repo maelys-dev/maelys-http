@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.12 - 2026-09-11
 
 ### Changed
 
@@ -22,12 +22,14 @@
   `dependencies/maelys-system.pin` instead of leaving it to be typed. It
   refuses a checkout whose `VERSION` is not the tag it is asked to render, and
   refuses an output still carrying a placeholder.
-
-- Re-adopt the maelys-release conventions at v0.29.0. The managed `AGENTS.md`
-  and `CLAUDE.md` blocks gain the CC-BY-4.0 attribution of the socle's agent
-  texts, and a bullet naming where this repository's prose lives. Nothing
-  else moved: `maelys-release check` reported every other managed file
-  unchanged before the adoption and passes after it.
+- Re-adopt the maelys-release conventions, from v0.24.0 to v0.37.0. The
+  managed `AGENTS.md` and `CLAUDE.md` blocks gain the CC-BY-4.0 attribution of
+  the socle's agent texts, the bullet naming where this repository's prose
+  lives, and the branch and release-cut conventions.
+- Take the lesson of socle 0.36.0 into this repository's own release:
+  `scripts/verify-release.sh` is invoked with `bash`, not `sh`. `sh` is dash
+  on Ubuntu and bash in POSIX mode on macOS, so a bashism passes on a
+  developer's machine and fails at the tag, where nothing is cheap to retry.
 
 ## 0.1.11 - 2026-09-10
 
