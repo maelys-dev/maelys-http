@@ -23,14 +23,28 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          set -euo pipefail
           test "$(git cat-file -t "$GITHUB_REF_NAME")" = tag
           test "$GITHUB_REF_NAME" = "v$(cat VERSION)"
-          git -c gpg.format=ssh \
-            -c gpg.ssh.allowedSignersFile="$GITHUB_WORKSPACE/.github/release-allowed-signers" \
+          # The list of keys allowed to sign a release is read from the default
+          # branch, never from the tagged commit. Read from the tag it would
+          # authorise itself: whoever can push adds a key, tags that commit
+          # with it, and the check passes. On the default branch a key is added
+          # only through a reviewed, checked pull request.
+          default_branch=$(gh api "repos/$GITHUB_REPOSITORY" --jq .default_branch)
+          signers="$RUNNER_TEMP/release-allowed-signers"
+          git show "origin/$default_branch:.github/release-allowed-signers" >"$signers"
+          test -s "$signers"
+          # allowedSignersFile governs SSH signatures only, and git picks its
+          # backend from the signature header rather than from gpg.format, so
+          # an OpenPGP tag would bypass the list instead of being measured
+          # against it. Refuse anything but SSH rather than verify nothing.
+          git cat-file tag "$GITHUB_REF_NAME" | grep -q '^-----BEGIN SSH SIGNATURE-----'
+          git -c gpg.format=ssh -c gpg.ssh.allowedSignersFile="$signers" \
             verify-tag "$GITHUB_REF_NAME"
           tag_commit=$(git rev-list -n 1 "$GITHUB_REF_NAME")
           test "$tag_commit" = "$(git rev-parse HEAD)"
-          git merge-base --is-ancestor "$tag_commit" origin/main
+          git merge-base --is-ancestor "$tag_commit" "origin/$default_branch"
           commit_verification=$(gh api \
             "repos/$GITHUB_REPOSITORY/git/commits/$tag_commit" \
             --jq '"\(.verification.verified) \(.verification.reason)"')
