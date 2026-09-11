@@ -1,6 +1,10 @@
 # Changelog
 
-## Unreleased
+## 0.1.13 - 2026-09-11
+
+The 0.1.12 preparation was merged but never tagged, so everything it carried
+ships here. Tagging its commit would have run the release path this version
+fixes.
 
 ### Security
 
@@ -20,8 +24,6 @@
   machine can sign one the release will accept. A refused tag is burned: the
   rule forbids moving a published tag, and no replay passes a signature the
   list does not name.
-
-## 0.1.12 - 2026-09-11
 
 ### Changed
 
@@ -43,10 +45,9 @@
   `dependencies/maelys-system.pin` instead of leaving it to be typed. It
   refuses a checkout whose `VERSION` is not the tag it is asked to render, and
   refuses an output still carrying a placeholder.
-- Re-adopt the maelys-release conventions, from v0.24.0 to v0.37.0. The
-  managed `AGENTS.md` and `CLAUDE.md` blocks gain the CC-BY-4.0 attribution of
-  the socle's agent texts, the bullet naming where this repository's prose
-  lives, and the branch and release-cut conventions.
+- Re-adopt the maelys-release conventions, from v0.24.0 to v0.38.1, whose
+  0.38.1 fixes a race this repository reported: a release published one
+  target's bytes under a name several targets build.
 - Take the lesson of socle 0.36.0 into this repository's own release:
   `scripts/verify-release.sh` is invoked with `bash`, not `sh`. `sh` is dash
   on Ubuntu and bash in POSIX mode on macOS, so a bashism passes on a
