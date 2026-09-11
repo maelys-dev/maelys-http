@@ -333,7 +333,8 @@ package-reproducibility-check:
 	./scripts/test-source-package.sh
 
 package-homebrew:
-	./scripts/render-homebrew-formula.sh
+	./scripts/render-homebrew-formula.sh v$(VERSION) \
+		dist/homebrew/libmaelys-http.rb libmaelys-http
 
 package-sbom: package-reproducibility-check
 	./scripts/generate-sbom.sh $(VERSION) $(SYSTEM_REQUIRED_VERSION)
