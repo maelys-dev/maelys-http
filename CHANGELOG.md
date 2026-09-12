@@ -19,7 +19,7 @@ none stops them before any compilation.
 
 - **Maelys HTTP publishes through the maelys-release socle.** The bespoke
   `.github/workflows/release.yml` is gone; `maelys-release adopt` generates it
-  from `maelys-release.conf`, on socle v0.40.1. What this repository decided
+  from `maelys-release.conf`, on socle v0.42.0. What this repository decided
   for itself and the socle now provides — build-once promotion, a build job
   with no write token, digests re-verified before publication, an SBOM
   attested against the file the document itself names — it provides for the
@@ -51,6 +51,12 @@ none stops them before any compilation.
   and `package-reproducibility-check` Makefile targets that split it are gone.
 - `ci.yml` runs on pushes to `main` only. Declared beside `pull_request` with
   no branch, it ran twice on every push of a pull request.
+- Re-adopted at socle v0.42.0 before the first release through it, from the
+  v0.40.1 taken earlier the same day. Neither v0.41.0 nor v0.42.0 changes
+  anything this product runs — the `[runners]` declaration v0.41.0 adds is
+  honoured on private repositories only, and this one is public, so the macOS
+  jobs stay on `macos-15` whatever is declared — but a first release is the
+  wrong moment to be two versions behind the workflows it calls.
 
 ### Security
 
