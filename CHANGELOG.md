@@ -70,6 +70,11 @@ none stops them before any compilation.
   signature that is not SSH, and requires the commit to be an ancestor of that
   branch. It resolves the tag from `VERSION` rather than from the triggering
   ref, so a `workflow_dispatch` replay is measured exactly as a tag push is.
+  Off a runner it also runs on a working branch — the socle's `cut` replays it
+  on `main` before writing `VERSION`, where the tag `VERSION` names is a
+  published release pointing at an older commit — and says so instead of
+  refusing. On a runner the release checked the tag out itself, so a tag that
+  is absent or names another commit stays a refusal there.
 - The socle's `release.yml` carries a `commit_verification` input that `adopt`
   never renders, so no product can ask for it and every one of them runs with
   it at `none`. Reported to maelys-release. Here the ancestry check above

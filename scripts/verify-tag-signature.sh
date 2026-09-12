@@ -35,23 +35,32 @@ case "$tag" in
     *) echo "verify-tag-signature: TAG must be vX.Y.Z: $tag" >&2; exit 64 ;;
 esac
 
-if ! git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
-    # On a runner the tag is the reason this code is running, so its absence
-    # is a broken checkout and not a developer's working branch.
+# Off a runner this runs on a working branch as often as on a tag: the socle's
+# `cut` replays it on main before writing VERSION, where VERSION still names
+# the previous release and its tag points at an older commit. That is a normal
+# state, not a refusal, and the two cases below say so. On a runner the release
+# checked the tag out itself, so either one is a broken checkout.
+not_ours() {
     if [ -n "${GITHUB_ACTIONS:-}" ]; then
-        echo "verify-tag-signature: $tag is not in this checkout; the release cannot verify what it publishes" >&2
+        echo "verify-tag-signature: $1" >&2
         exit 65
     fi
-    echo "verify-tag-signature: no $tag here; skipped (run scripts/check-signing-key.sh before creating it)"
+    echo "verify-tag-signature: $2; skipped (run scripts/check-signing-key.sh before creating a tag)"
     exit 0
+}
+
+if ! git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
+    not_ours "$tag is not in this checkout; the release cannot verify what it publishes" \
+             "no $tag here"
 fi
 
 test "$(git cat-file -t "$tag")" = tag || {
     echo "verify-tag-signature: $tag is not an annotated tag" >&2; exit 65
 }
-test "$(git rev-list -n 1 "$tag")" = "$(git rev-parse HEAD)" || {
-    echo "verify-tag-signature: $tag does not name the checked-out commit" >&2; exit 65
-}
+if [ "$(git rev-list -n 1 "$tag")" != "$(git rev-parse HEAD)" ]; then
+    not_ours "$tag does not name the checked-out commit" \
+             "$tag names an earlier commit, so it is a published release and not this checkout"
+fi
 
 # gpg.ssh.allowedSignersFile governs SSH signatures only, and git picks its
 # backend from the signature header rather than from gpg.format, so an
