@@ -1,15 +1,16 @@
 # typed: strict
 # frozen_string_literal: true
 
-# Rendered by maelys-release from this template: @VERSION@ and @SHA256@ are
-# replaced with the released source archive of one tag, and the pinned Maelys
-# System version in the comment below is copied from
-# dependencies/maelys-system.pin of that tag by
-# scripts/render-homebrew-formula.sh. Nothing here is typed at release time.
+# Rendered by the socle's tap workflow from this template, through
+# scripts/render-homebrew-formula.sh: @URL@, @VERSION@ and @SHA256@ name the
+# published source archive of one tag and the digest of those exact bytes,
+# and @SYSTEM_VERSION@ in the comment below is copied from
+# dependencies/maelys-system.pin held inside that same archive. Nothing here
+# is typed at release time.
 class LibmaelysHttp < Formula
   desc "Bounded HTTP/1.1 codec and streaming client"
   homepage "https://github.com/maelys-dev/maelys-http"
-  url "https://github.com/maelys-dev/maelys-http/releases/download/v@VERSION@/maelys-http-@VERSION@.tar.gz"
+  url "@URL@"
   sha256 "@SHA256@"
   license "MPL-2.0"
 

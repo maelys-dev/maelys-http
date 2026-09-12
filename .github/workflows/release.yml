@@ -1,183 +1,55 @@
-name: Release
+name: release
 
+# Managed by maelys-release v0.40.1 (0.40.1). Regenerate with
+# 'maelys-release adopt' of maelys-release; do not edit by hand.
 on:
   push:
-    tags:
-      - 'v*'
-
-concurrency:
-  group: maelys-http-release-${{ github.ref }}
-  cancel-in-progress: false
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing signed tag whose release and Homebrew publication are replayed
+        required: true
+        type: string
 
 permissions:
-  contents: read
+  contents: write
+  id-token: write
+  attestations: write
 
 jobs:
-  authenticity:
-    runs-on: ubuntu-26.04
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-      - name: Verify signed tag, signed commit and protected lineage
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          test "$(git cat-file -t "$GITHUB_REF_NAME")" = tag
-          test "$GITHUB_REF_NAME" = "v$(cat VERSION)"
-          # The list of keys allowed to sign a release is read from the default
-          # branch, never from the tagged commit. Read from the tag it would
-          # authorise itself: whoever can push adds a key, tags that commit
-          # with it, and the check passes. On the default branch a key is added
-          # only through a reviewed, checked pull request.
-          default_branch=$(gh api "repos/$GITHUB_REPOSITORY" --jq .default_branch)
-          signers="$RUNNER_TEMP/release-allowed-signers"
-          git show "origin/$default_branch:.github/release-allowed-signers" >"$signers"
-          test -s "$signers"
-          # allowedSignersFile governs SSH signatures only, and git picks its
-          # backend from the signature header rather than from gpg.format, so
-          # an OpenPGP tag would bypass the list instead of being measured
-          # against it. Refuse anything but SSH rather than verify nothing.
-          git cat-file tag "$GITHUB_REF_NAME" | grep -q '^-----BEGIN SSH SIGNATURE-----'
-          git -c gpg.format=ssh -c gpg.ssh.allowedSignersFile="$signers" \
-            verify-tag "$GITHUB_REF_NAME"
-          tag_commit=$(git rev-list -n 1 "$GITHUB_REF_NAME")
-          test "$tag_commit" = "$(git rev-parse HEAD)"
-          git merge-base --is-ancestor "$tag_commit" "origin/$default_branch"
-          commit_verification=$(gh api \
-            "repos/$GITHUB_REPOSITORY/git/commits/$tag_commit" \
-            --jq '"\(.verification.verified) \(.verification.reason)"')
-          test "$commit_verification" = "true valid"
-
-  verify:
-    needs: authenticity
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - runner: ubuntu-26.04
-            target: linux-x86_64
-            release_artifact: true
-          - runner: ubuntu-26.04-arm
-            target: linux-arm64
-            release_artifact: false
-          - runner: macos-15
-            target: macos-arm64
-            install: brew install mbedtls
-            release_artifact: false
-    runs-on: ${{ matrix.runner }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-      - name: Pinned maelys-system checkout
-        run: sh scripts/checkout-dependency.sh maelys-system maelys-system
-      - name: Pinned Mbed TLS checkout (Linux)
-        if: runner.os == 'Linux'
-        run: sh scripts/checkout-dependency.sh mbedtls mbedtls
-      - name: Build pinned Mbed TLS 3.6.7 (Linux)
-        if: runner.os == 'Linux'
-        run: |
-          cmake -S mbedtls -B mbedtls-build \
-            -DENABLE_PROGRAMS=OFF -DENABLE_TESTING=OFF \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_INSTALL_PREFIX="$GITHUB_WORKSPACE/mbedtls-prefix"
-          cmake --build mbedtls-build --parallel
-          cmake --install mbedtls-build
-          test -f "$GITHUB_WORKSPACE/mbedtls-prefix/lib/pkgconfig/mbedtls.pc"
-          echo "PKG_CONFIG_PATH=$GITHUB_WORKSPACE/mbedtls-prefix/lib/pkgconfig" \
-            >>"$GITHUB_ENV"
-      - run: ${{ matrix.install }}
-        if: runner.os == 'macOS'
-      - run: make -C maelys-system clean check CC=clang CXX=clang++
-      - name: Replay the gates on the tagged commit
-        env:
-          SYSTEM_DIR: maelys-system
-          CC: clang
-          CXX: clang++
-        # bash, not sh: the socle found in 0.36.0 that sh is dash on Ubuntu
-        # and bash in POSIX mode on macOS, so a bashism passes on a developer's
-        # machine and fails at the tag, the one moment nothing is cheap to retry.
-        run: bash scripts/verify-release.sh ${{ matrix.target }}
-      - name: Build the release bytes and SPDX SBOM once
-        if: matrix.release_artifact
-        run: make package-archive-check package-homebrew SYSTEM_DIR=maelys-system
-      - name: Preserve the tested release bytes
-        if: matrix.release_artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: release-assets
-          path: |
-            dist/maelys-http-*.tar
-            dist/maelys-http-*.tar.sha256
-            dist/maelys-http-*.tar.gz
-            dist/maelys-http-*.tar.gz.sha256
-            dist/maelys-http-*.spdx.json
-            dist/SHA256SUMS
-            dist/homebrew/libmaelys-http.rb
-          if-no-files-found: error
-          compression-level: 0
-          retention-days: 7
-
-  publish:
-    needs: verify
-    runs-on: ubuntu-26.04
+  release:
+    uses: maelys-dev/maelys-release/.github/workflows/release.yml@71610a81b6b24bfa0124cbdbdb0651ce64ccb3b8 # v0.40.1
     permissions:
       contents: write
       id-token: write
       attestations: write
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-      - name: Restore the already-tested release bytes
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: release-assets
-          path: dist
-      - name: Verify promoted bytes and locate the SBOM
-        id: release-files
-        run: |
-          test "$GITHUB_REF_NAME" = "v$(cat VERSION)"
-          (cd dist && sha256sum -c SHA256SUMS)
-          archive=$(find dist -maxdepth 1 -name 'maelys-http-*.tar.gz' -type f)
-          sbom=$(find dist -maxdepth 1 -name 'maelys-http-*.spdx.json' -type f)
-          test -n "$archive"
-          test -n "$sbom"
-          test "$(printf '%s\n' "$archive" | wc -l)" = 1
-          test "$(printf '%s\n' "$sbom" | wc -l)" = 1
-          printf 'archive=%s\nsbom=%s\n' "$archive" "$sbom" >>"$GITHUB_OUTPUT"
-      - name: Attest build provenance
-        id: provenance
-        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
-        with:
-          subject-path: |
-            dist/maelys-http-*.tar
-            dist/maelys-http-*.tar.gz
-      - name: Preserve the offline provenance bundle
-        run: |
-          version=$(cat VERSION)
-          cp "${{ steps.provenance.outputs.bundle-path }}" \
-            "dist/maelys-http-$version.provenance.intoto.jsonl"
-      - name: Attest the SPDX SBOM against the compressed archive
-        id: sbom-attestation
-        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
-        with:
-          subject-path: ${{ steps.release-files.outputs.archive }}
-          sbom-path: ${{ steps.release-files.outputs.sbom }}
-      - name: Preserve the offline SBOM bundle
-        run: |
-          version=$(cat VERSION)
-          cp "${{ steps.sbom-attestation.outputs.bundle-path }}" \
-            "dist/maelys-http-$version.sbom.intoto.jsonl"
-      - name: Publish GitHub release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh release create "$GITHUB_REF_NAME" \
-            dist/maelys-http-*.tar dist/maelys-http-*.tar.sha256 \
-            dist/maelys-http-*.tar.gz dist/maelys-http-*.tar.gz.sha256 \
-            dist/maelys-http-*.spdx.json dist/maelys-http-*.intoto.jsonl \
-            dist/SHA256SUMS dist/homebrew/libmaelys-http.rb \
-            --verify-tag --generate-notes --title "Maelys HTTP $GITHUB_REF_NAME"
+    with:
+      product: maelys-http
+      tag: ${{ inputs.tag || github.ref_name }}
+      dependency_checkout: |
+        sh scripts/checkout-dependency.sh maelys-system
+        sh scripts/checkout-dependency.sh mbedtls
+      verify_command: bash scripts/verify-release.sh TARGET
+      linux_packages: build-essential dpkg-dev file rpm pkg-config cmake
+      macos_packages: pkg-config mbedtls
+      targets: '[{"target": "linux-x86_64"}]'
+      manifest_patterns: '*.tar.gz *.deb *.rpm *.tar *.spdx.json'
+      sbom_pattern: '*.spdx.json'
+
+  tap-libmaelys-http:
+    needs: release
+    if: needs.release.result == 'success'
+    uses: maelys-dev/maelys-release/.github/workflows/tap.yml@71610a81b6b24bfa0124cbdbdb0651ce64ccb3b8 # v0.40.1
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    with:
+      product: libmaelys-http
+      tag: ${{ inputs.tag || github.ref_name }}
+      render_command: sh scripts/render-homebrew-formula.sh TAG OUTPUT libmaelys-http
+      bottles: '["macos-15","macos-26"]'
+    secrets:
+      tap_token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+      tap_signing_key: ${{ secrets.HOMEBREW_TAP_SIGNING_KEY }}

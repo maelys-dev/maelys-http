@@ -1,5 +1,62 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- **Maelys HTTP publishes through the maelys-release socle.** The bespoke
+  `.github/workflows/release.yml` is gone; `maelys-release adopt` generates it
+  from `maelys-release.conf`, on socle v0.40.1. What this repository decided
+  for itself and the socle now provides — build-once promotion, a build job
+  with no write token, digests re-verified before publication, an SBOM
+  attested against the file the document itself names — it provides for the
+  whole fleet, and three of those pieces came from here. What the socle adds
+  is what a bespoke workflow never had: a `workflow_dispatch` replay on an
+  existing tag, so a failed publication no longer burns a version; a reviewer
+  gate on the `release` environment; and the tap job, which builds bottles on
+  macos-15 and macos-26 and pushes the formula under the operator's own
+  identity, where `maelys-release tap --apply` pushed under an address
+  attached to no account.
+- The release verification matrix is one target, `linux-x86_64`. What this
+  product publishes is a source archive, and source has no target: `git
+  archive` writes the same tar everywhere, gzip does not, and three runners
+  compressing one tree into three different archives is a clash the socle
+  refuses. The three targets still gate every commit through `ci.yml`, and the
+  conventions forbid tagging a commit those checks have not passed; what the
+  tag drops is the second run, not the coverage.
+- `scripts/render-homebrew-formula.sh` renders from the **published** archive
+  of a tag: it downloads it, hashes those exact bytes, and reads the template,
+  `VERSION` and the Maelys System pin from inside that same archive. The tap
+  renders on macOS while the release builds on Linux, and gzip is not
+  byte-identical between the two, so a formula hashing a locally rebuilt
+  archive named a digest no downloader ever computed. That is the mismatch the
+  0.1.13 tap publication had to work around by hand.
+- `scripts/package-release.sh` takes the socle's `TARGET` and carries the
+  whole packaging chain — archives, digests, reproducibility check, SBOM and
+  the build of the extracted archive — so what runs at the tag is one command
+  a developer can run unchanged. The `package-sbom`, `package-archive-check`
+  and `package-reproducibility-check` Makefile targets that split it are gone.
+- `ci.yml` runs on pushes to `main` only. Declared beside `pull_request` with
+  no branch, it ran twice on every push of a pull request.
+
+### Security
+
+- The allowlist of keys that may sign a release tag survives the move, in
+  `scripts/verify-tag-signature.sh`, which `scripts/verify-release.sh` runs
+  before a single byte is packaged. The socle proves a tag is annotated,
+  verified by GitHub and equal to `VERSION`; GitHub reports a tag as verified
+  when any key any account registered signed it, which says a signature is
+  genuine and not that the signer may release this product. The script reads
+  `.github/release-allowed-signers` from the default branch, refuses a
+  signature that is not SSH, and requires the commit to be an ancestor of that
+  branch. It resolves the tag from `VERSION` rather than from the triggering
+  ref, so a `workflow_dispatch` replay is measured exactly as a tag push is.
+- The socle's `release.yml` carries a `commit_verification` input that `adopt`
+  never renders, so no product can ask for it and every one of them runs with
+  it at `none`. Reported to maelys-release. Here the ancestry check above
+  answers the same question without it: `main` requires signed commits, so a
+  commit that is an ancestor of it is a commit GitHub verified.
+
 ## 0.1.13 - 2026-09-11
 
 The 0.1.12 preparation was merged but never tagged, so everything it carried
