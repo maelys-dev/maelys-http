@@ -1,6 +1,19 @@
 # Changelog
 
-## Unreleased
+## 0.1.14 - 2026-09-12
+
+This is the first release published by the socle, and the first to carry
+Homebrew bottles for `libmaelys-http`. maelys-oci was blocked on those: its
+own bottle jobs install dependencies from bottles, and a formula that has
+none stops them before any compilation.
+
+### Added
+
+- `scripts/bump-version.sh`, declared as the socle's `[cut] after-version`.
+  The version is materialised twice — `VERSION` and the three macros of
+  `include/maelys/http.h` — and `cut` now copies one into the other inside
+  the bump commit, so the two never travel apart and a release pull request
+  cannot fail its own `make check-version`.
 
 ### Changed
 
