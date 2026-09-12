@@ -1,13 +1,20 @@
 #!/bin/sh
+# Checks the archives scripts/package-release.sh has just written: the
+# compressed archive expands to the canonical tar byte for byte, both
+# digests are the ones SHA256SUMS records, and the manifest covers those two
+# files and nothing else. It reads dist/ and never rebuilds it, so what it
+# verifies is what the release will publish.
 set -eu
 
 root=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
 cd "$root"
 version=$(sed -n '1p' VERSION)
-./scripts/package-release.sh "$version" >/dev/null
 
 source_tar="dist/maelys-http-$version.tar"
 archive="$source_tar.gz"
+test -f "$source_tar" || { echo "test-source-package: no $source_tar; run scripts/package-release.sh" >&2; exit 66; }
+test -f "$archive" || { echo "test-source-package: no $archive; run scripts/package-release.sh" >&2; exit 66; }
+
 expanded=$(mktemp)
 trap 'rm -f "$expanded"' EXIT HUP INT TERM
 gzip -dc "$archive" >"$expanded"

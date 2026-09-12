@@ -7,6 +7,7 @@ name: CI
 # the distribution does not ship.
 on:
   push:
+    branches: [main]
   pull_request:
 
 permissions:
@@ -14,7 +15,7 @@ permissions:
 
 jobs:
   check:
-    uses: maelys-dev/maelys-release/.github/workflows/check-product.yml@9f7c6950149db39c60415741572e939eeb4106af # v0.38.1
+    uses: maelys-dev/maelys-release/.github/workflows/check-product.yml@71610a81b6b24bfa0124cbdbdb0651ce64ccb3b8 # v0.40.1
     with:
       product: maelys-http
       check_command: make check install-check

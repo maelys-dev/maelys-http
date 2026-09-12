@@ -41,8 +41,7 @@ TEST_BINS := $(BUILD)/test_parser $(BUILD)/test_conformance $(BUILD)/test_messag
 
 .PHONY: all clean check check-version check-mbedtls-policy test sanitizers tsan \
 	fuzz fuzz-smoke install uninstall check-system-pin install-check package \
-	package-homebrew package-reproducibility-check package-sbom package-archive-check \
-	check-mbedtls tls-integration \
+	package-homebrew check-mbedtls tls-integration \
 	install-mbedtls
 
 all: $(BUILD)/libmaelys_http.a $(BUILD)/libmaelys_http_client.a
@@ -326,21 +325,19 @@ uninstall:
 install-check: all
 	./scripts/install-check.sh
 
+# Everything the release publishes, built exactly as the socle's release
+# workflow builds it: the script is its package_command, and it carries the
+# reproducibility check, the SBOM and the extracted-archive build itself, so
+# what runs at the tag is what a developer can run here.
 package: check
-	./scripts/package-release.sh $(VERSION)
+	./scripts/package-release.sh
 
-package-reproducibility-check:
-	./scripts/test-source-package.sh
-
+# The formula is rendered from the published archive of a released tag, so
+# this needs that tag to exist. The socle's tap workflow calls the same
+# script with the same three arguments.
 package-homebrew:
 	./scripts/render-homebrew-formula.sh v$(VERSION) \
 		dist/homebrew/libmaelys-http.rb libmaelys-http
-
-package-sbom: package-reproducibility-check
-	./scripts/generate-sbom.sh $(VERSION) $(SYSTEM_REQUIRED_VERSION)
-
-package-archive-check: package-sbom
-	./scripts/test-release-archive.sh $(VERSION) $(SYSTEM_DIR)
 
 clean:
 	rm -rf $(BUILD) dist
