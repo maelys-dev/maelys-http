@@ -15,7 +15,7 @@ permissions:
 
 jobs:
   check:
-    uses: maelys-dev/maelys-release/.github/workflows/check-product.yml@a96cf015064b98de604ffce62fcf4cf351b9f754 # v0.42.0
+    uses: maelys-dev/maelys-release/.github/workflows/check-product.yml@3cfeae4e219b0e0da038b4c538a8068b9062b1f1 # v0.46.1
     with:
       product: maelys-http
       check_command: make check install-check
@@ -36,8 +36,15 @@ jobs:
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Pinned dependency checkouts
-        run: sh scripts/checkout-dependency.sh maelys-system
+      # Under $RUNNER_TEMP and never beside the checkout, which is what
+      # MAELYS_DEPENDENCIES_DIR means. Named one by one rather than through
+      # scripts/checkout-dependencies.sh, which clones every pin: this job
+      # links against Maelys System and never touches Mbed TLS, and the
+      # organisation pays ten minutes for one on macOS.
+      - name: Pinned dependencies
+        run: |
+          sh scripts/checkout-dependency.sh maelys-system "$RUNNER_TEMP/dependencies/maelys-system"
+          echo "MAELYS_DEPENDENCIES_DIR=$RUNNER_TEMP/dependencies" >>"$GITHUB_ENV"
       - name: Install packages
         run: |
           # A broken third-party apt source of the runner image must not fail an
@@ -57,27 +64,21 @@ jobs:
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Pinned dependency checkouts
-        run: sh scripts/checkout-dependency.sh maelys-system
+      - name: Pinned dependencies
+        run: |
+          sh scripts/checkout-dependency.sh maelys-system "$RUNNER_TEMP/dependencies/maelys-system"
+          echo "MAELYS_DEPENDENCIES_DIR=$RUNNER_TEMP/dependencies" >>"$GITHUB_ENV"
       # The Linux distribution ships Mbed TLS below the floor that
       # providers/mbedtls_version_policy.h enforces, so the pinned upstream
       # commit is built from source. dependencies/mbedtls.pin names it, the
-      # repository it lives in and the submodule its build needs.
-      - name: Pinned Mbed TLS checkout (Linux)
-        if: runner.os == 'Linux'
-        run: sh scripts/checkout-dependency.sh mbedtls
-      - name: Build pinned Mbed TLS (Linux)
+      # repository it lives in and the submodule its build needs. macOS takes
+      # brew's, which is above the floor, and clones none of this.
+      - name: Pinned Mbed TLS (Linux)
         if: runner.os == 'Linux'
         run: |
-          cmake -S ../mbedtls -B ../mbedtls-build \
-            -DENABLE_PROGRAMS=OFF -DENABLE_TESTING=OFF \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_INSTALL_PREFIX="$GITHUB_WORKSPACE/mbedtls-prefix"
-          cmake --build ../mbedtls-build --parallel
-          cmake --install ../mbedtls-build
-          test -f "$GITHUB_WORKSPACE/mbedtls-prefix/lib/pkgconfig/mbedtls.pc"
-          echo "PKG_CONFIG_PATH=$GITHUB_WORKSPACE/mbedtls-prefix/lib/pkgconfig" \
-            >>"$GITHUB_ENV"
+          sh scripts/checkout-dependency.sh mbedtls "$RUNNER_TEMP/dependencies/mbedtls"
+          # The same script the release runs, so the two cannot drift.
+          echo "PKG_CONFIG_PATH=$(sh scripts/build-pinned-mbedtls.sh --print)" >>"$GITHUB_ENV"
       - name: Install Mbed TLS (macOS)
         if: runner.os == 'macOS'
         run: brew install mbedtls

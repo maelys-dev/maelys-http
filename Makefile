@@ -13,7 +13,14 @@ MBEDTLS_PKGCONFIG_MIN_VERSION ?= 3.6.7
 FUZZ_TARGETS := request response chunked smuggling
 FUZZ_RUNS ?= 10000
 FUZZ_MAX_LEN ?= 65536
-SYSTEM_DIR ?= ../maelys-system
+# The pinned checkouts live apart from this repository, under the root the
+# socle materialises and exports, never beside it: beside it is where the
+# working copy of somebody who also develops Maelys System sits, and
+# ../maelys-system could not be told from it. 'sh
+# scripts/checkout-dependencies.sh DIR' writes them and prints the
+# assignment below for a shell to take whole.
+MAELYS_DEPENDENCIES_DIR ?=
+SYSTEM_DIR ?= $(MAELYS_DEPENDENCIES_DIR)/maelys-system
 # dependencies/maelys-system.pin is the single declaration of the dependency,
 # in the maelys-release socle's format: the nearest tag on line 1 for humans,
 # the pinned commit on line 2. The Makefile, the SBOM and the CI checkout all
@@ -281,6 +288,12 @@ tls-integration: check-system-pin check-mbedtls $(SYSTEM_LIB)
 check-system-pin:
 	@printf '%s' "$(SYSTEM_PIN)" | grep -Eq '^[0-9a-f]{40}$$' || \
 		{ echo 'dependencies/maelys-system.pin line 2 is not a commit'; exit 1; }
+	@test -d "$(SYSTEM_DIR)" || \
+		{ echo "no maelys-system checkout at '$(SYSTEM_DIR)'"; \
+		  echo 'the pinned checkouts live apart from this repository; give their root:'; \
+		  echo '  eval "$$(sh scripts/checkout-dependencies.sh "$$PWD/../maelys-http-deps")"'; \
+		  echo 'or maelys-release dependencies . --apply, which prints the same line'; \
+		  exit 1; }
 	@test "$$(sed -n 's/^#define MAELYS_SYS_VERSION "\([^"]*\)"/\1/p' \
 		$(SYSTEM_DIR)/include/maelys/sys/version.h)" = "$(SYSTEM_REQUIRED_VERSION)" || \
 		{ echo "maelys-system $(SYSTEM_REQUIRED_VERSION) is required"; exit 1; }
@@ -323,7 +336,7 @@ uninstall:
 		$(DESTDIR)$(PREFIX)/lib/pkgconfig/maelys-http-tls-mbedtls.pc
 
 install-check: all
-	./scripts/install-check.sh
+	SYSTEM_DIR=$(SYSTEM_DIR) ./scripts/install-check.sh
 
 # Everything the release publishes, built exactly as the socle's release
 # workflow builds it: the script is its package_command, and it carries the

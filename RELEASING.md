@@ -23,6 +23,14 @@ what it runs lives in `scripts/`.
   approver and the tagger are the same person, so it is a pause rather than a
   control — and a pause is what was missing the day a tag was pushed before its
   verdict had been read.
+- **`[commit] signed-on-default-branch`**: the commit the tag names carries its
+  own GitHub-verified signature and is an ancestor of the default branch.
+- **`[dependencies] apart`**: the pinned checkouts live under
+  `$MAELYS_DEPENDENCIES_DIR` and never beside this repository, which is where
+  the working copy of somebody who also develops Maelys System would sit.
+- **`[cut] after-version`**: the version is materialised twice, here and in
+  `include/maelys/http.h`, and `cut` copies one into the other inside the bump
+  commit.
 
 ## Repository controls
 
@@ -56,9 +64,15 @@ before a single byte is packaged. It proves, on the runner:
    it would authorise itself, since whoever can push adds a key, tags that
    commit with it and passes;
 4. the commit is an ancestor of the default branch, so a tag cannot publish a
-   commit that never landed. Since `main` requires signed commits, that
-   ancestry is also what makes the commit's own signature verified; the release
-   does not ask GitHub a second time, and needs no API token to do so.
+   commit that never landed.
+
+The socle asserts that last point too, since `maelys-release.conf` declares
+`[commit] signed-on-default-branch`, and adds what this script cannot: the
+commit's own signature, verified by GitHub, which needs an API token the
+`verify_command` step is not given. The two overlap deliberately — the socle
+asks earlier and knows more, this script keeps working when run by hand — and
+what only this script answers is the first three points. GitHub says a
+signature is genuine; the allowlist says whose signature may publish.
 
 Run `scripts/check-signing-key.sh` **before** creating the tag. A tag the
 release refuses is a tag that is burned: the conventions forbid moving a
@@ -79,13 +93,15 @@ tag does not yet exist.
    --apply` signs the tag on that merge commit.
 4. The socle's `verify` job checks `VERSION` against the tag, that the tag is
    annotated and verified by GitHub, and that it names the checked-out commit.
-5. The `build` job checks out the pinned Maelys System and Mbed TLS, runs
+5. The `build` job materialises every pin under `$RUNNER_TEMP/dependencies`
+   with `scripts/checkout-dependencies.sh` and exports the root, then runs
    `scripts/verify-release.sh linux-x86_64` — the allowlist above, then `make
    check install-check check-system-pin` and `make tls-integration
    REQUIRE_MBEDTLS=1` against the Mbed TLS commit `dependencies/mbedtls.pin`
-   names — and only then runs `scripts/package-release.sh`, which writes the
-   archives, their digests, the reproducibility check, the SBOM and the build
-   of the extracted archive. It holds no write token.
+   names, built by `scripts/build-pinned-mbedtls.sh` — and only then runs
+   `scripts/package-release.sh`, which writes the archives, their digests, the
+   reproducibility check, the SBOM and the build of the extracted archive. It
+   holds no write token.
 6. The `publish` job waits for the reviewer, downloads what `build` produced,
    re-verifies every digest, writes `SHA256SUMS` and creates the release. It is
    the only job that may write.
@@ -115,3 +131,17 @@ Never bypass a failed verification, pin, Mbed TLS security-floor or checksum
 check. A distribution build may define
 `MAELYS_HTTP_MBEDTLS_ALLOW_BACKPORTED_SECURITY_FIXES` only after verifying that
 its maintained package carries every applicable upstream security fix.
+
+## Building it by hand
+
+The pinned checkouts live apart from this repository and no path is assumed,
+so one line puts them somewhere and says where:
+
+```sh
+eval "$(sh scripts/checkout-dependencies.sh "$PWD/../maelys-http-deps")"
+```
+
+`maelys-release dependencies . --apply` prints the same assignment and, unlike
+the script, refreshes a root that already exists instead of refusing it. From
+there `make check`, `bash scripts/verify-release.sh <target>` and `bash
+scripts/package-release.sh` are exactly what the release runs.

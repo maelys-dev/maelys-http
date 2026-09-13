@@ -5,7 +5,9 @@ root="$(mktemp -d)"
 cleanup() { rm -rf "$root"; }
 trap cleanup EXIT INT TERM
 
-system_dir="${SYSTEM_DIR:-../maelys-system}"
+# Given by the Makefile, which derives it from MAELYS_DEPENDENCIES_DIR: the
+# pinned checkouts live apart from this repository and no path is assumed here.
+system_dir="${SYSTEM_DIR:?SYSTEM_DIR required; run this through 'make install-check'}"
 make -C "$system_dir" install DESTDIR="$root" PREFIX=/usr/local >/dev/null
 make install DESTDIR="$root" PREFIX=/usr/local >/dev/null
 test -f "$root/usr/local/lib/libmaelys_http.a"

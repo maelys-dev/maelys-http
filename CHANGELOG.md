@@ -1,5 +1,43 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- **The pinned checkouts live apart from this repository.** `maelys-release.conf`
+  declares `[dependencies] apart`, and the Makefile derives `SYSTEM_DIR` from
+  `$MAELYS_DEPENDENCIES_DIR` instead of defaulting to `../maelys-system`. Beside
+  the repository is exactly where the working copy of somebody who also develops
+  Maelys System sits, and `../maelys-system` could not be told from it: the build
+  read whatever was there and only its own pin check noticed. maelys-egress lost
+  four `make check` runs in a day to this. `make check-system-pin` now names the
+  root it wanted and the one line that provides it, rather than failing on a
+  header it could not find.
+- `scripts/build-pinned-mbedtls.sh` builds the commit `dependencies/mbedtls.pin`
+  names and prints where its pkg-config landed. The release and the `mbedtls` job
+  of `ci.yml` ran two copies of the same cmake invocation; they now run this one,
+  so the gate at the tag and the gate on a pull request cannot drift. The prefix
+  is outside this tree, so `make clean` no longer throws away a build that takes
+  minutes.
+- `scripts/test-release-archive.sh` and `scripts/install-check.sh` take no path
+  of their own: the environment already says where the pinned checkouts are.
+- `ci.yml` names the pins each job actually needs rather than cloning all of
+  them. The `clang` jobs and the macOS TLS job link against Maelys System and
+  never touch Mbed TLS, whose checkout carries its submodules; a macOS minute
+  bills as ten.
+- Adopted socle v0.46.1, from v0.42.0.
+
+### Security
+
+- **`[commit] signed-on-default-branch`.** The release now asks that the commit
+  a tag names carries its own GitHub-verified signature and is an ancestor of
+  the default branch. The input had existed since socle v0.21.0 with nothing
+  rendering it and no section declaring it, so `none` was the only value any
+  product could reach; v0.46.0 made it reachable after this repository reported
+  it. `scripts/verify-tag-signature.sh` keeps what the socle still does not
+  answer — which keys may sign a release at all — and its own ancestry check,
+  which costs one line and keeps the script meaningful when run by hand.
+
 ## 0.1.14 - 2026-09-12
 
 This is the first release published by the socle, and the first to carry
