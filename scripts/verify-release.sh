@@ -23,37 +23,25 @@ cd "$root"
 # .github/release-allowed-signers signed stops here, with nothing packaged.
 sh scripts/verify-tag-signature.sh
 
-system_dir=${SYSTEM_DIR:-../maelys-system}
-test -d "$system_dir" || {
-    echo "verify-release: no maelys-system checkout at $system_dir; run scripts/checkout-dependency.sh maelys-system" >&2
-    exit 66
+# The pinned checkouts live apart from this repository, under the root the
+# socle materialises and exports; the Makefile derives SYSTEM_DIR from it.
+test -n "${MAELYS_DEPENDENCIES_DIR:-}" || {
+    echo 'verify-release: MAELYS_DEPENDENCIES_DIR is unset; the pinned checkouts live apart' >&2
+    echo '  eval "$(sh scripts/checkout-dependencies.sh "$PWD/../maelys-http-deps")"' >&2
+    exit 64
 }
 
+# Before anything is built, including Mbed TLS, whose prefix is deliberately
+# outside this tree and survives it.
+make clean
+
 case "$target" in
-    linux-*)
-        mbedtls_src=${MBEDTLS_DIR:-../mbedtls}
-        test -d "$mbedtls_src" || {
-            echo "verify-release: no Mbed TLS checkout at $mbedtls_src; run scripts/checkout-dependency.sh mbedtls" >&2
-            exit 66
-        }
-        prefix=$(CDPATH='' cd -- "$(dirname "$mbedtls_src")" && pwd)/mbedtls-prefix
-        if [ ! -f "$prefix/lib/pkgconfig/mbedtls.pc" ]; then
-            cmake -S "$mbedtls_src" -B "$mbedtls_src-build" \
-                -DENABLE_PROGRAMS=OFF -DENABLE_TESTING=OFF \
-                -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$prefix"
-            cmake --build "$mbedtls_src-build" --parallel
-            cmake --install "$mbedtls_src-build"
-        fi
-        test -f "$prefix/lib/pkgconfig/mbedtls.pc"
-        PKG_CONFIG_PATH="$prefix/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
-        export PKG_CONFIG_PATH
-        ;;
+    linux-*) eval "$(sh scripts/build-pinned-mbedtls.sh)" ;;
 esac
 
-make clean
-make check install-check check-system-pin SYSTEM_DIR="$system_dir"
+make check install-check check-system-pin
 # REQUIRE_MBEDTLS=1: without it a provider pkg-config cannot see turns the
 # target into a skip, and the release would report a success that proved
 # nothing about TLS.
-make tls-integration REQUIRE_MBEDTLS=1 SYSTEM_DIR="$system_dir"
+make tls-integration REQUIRE_MBEDTLS=1
 echo "verify-release: $target passed the tag, source, install and TLS gates"

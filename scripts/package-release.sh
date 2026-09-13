@@ -55,6 +55,6 @@ cat "$source_tar.sha256" "$archive.sha256" >dist/SHA256SUMS
 
 ./scripts/test-source-package.sh
 ./scripts/generate-sbom.sh "$version" "$system_version" >/dev/null
-./scripts/test-release-archive.sh "$version" "${SYSTEM_DIR:-../maelys-system}"
+./scripts/test-release-archive.sh "$version"
 
 echo "$archive"
