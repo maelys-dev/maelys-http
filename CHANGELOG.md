@@ -4,6 +4,16 @@
 
 ### Changed
 
+- **`LICENSING.md` says what this repository engages publicly, and what it
+  redistributes.** Both sections were the socle's skeleton, unfilled since it
+  wrote the file. `docs/provenance.md` is engaged: `NOTICE` names it as where
+  the exact repositories, commits and extracted ideas behind the retained MIT
+  notices are recorded, and `NOTICE` ships inside the released source archive.
+  Without this, the prose migration would have moved an attribution document
+  into a private repository and left the public `NOTICE` pointing at something
+  its readers cannot open. The classification reads `LICENSING.md` alone, so
+  `NOTICE` engaging a document was invisible to it.
+
 - **The pinned checkouts live apart from this repository.** `maelys-release.conf`
   declares `[dependencies] apart`, and the Makefile derives `SYSTEM_DIR` from
   `$MAELYS_DEPENDENCIES_DIR` instead of defaulting to `../maelys-system`. Beside
