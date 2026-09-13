@@ -4,6 +4,14 @@
 
 ### Changed
 
+- **The prose moves out of `docs/`.** The architecture, the security model, the
+  client contract, the resolver provider design, the ABI policy and the
+  consumer notes are published with the documentation of the other Maelys
+  products, with their history; `maelys-release migrate` carried it across.
+  `docs/provenance.md` stays: `NOTICE` names it, and `NOTICE` ships inside the
+  released source archive. What remains under `docs/` is what a machine writes
+  and what this repository engages publicly.
+
 - **`LICENSING.md` says what this repository engages publicly, and what it
   redistributes.** Both sections were the socle's skeleton, unfilled since it
   wrote the file. `docs/provenance.md` is engaged: `NOTICE` names it as where

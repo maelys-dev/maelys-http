@@ -58,11 +58,6 @@ all applicable security fixes must opt in explicitly with
 The exception only lowers the patch floor on the 3.6 and 4.1 lines; it does not
 re-enable obsolete major or minor releases.
 
-See [architecture](docs/architecture.md), [security model](docs/security-model.md),
-[client contract](docs/client.md),
-[resolver provider design](docs/resolver-provider-design.md), and
-[provenance](docs/provenance.md).
-
 ## Non-goals
 
 This library contains no JSON, JSON-RPC, MCP, OCI Registry, proxy policy,
@@ -76,5 +71,15 @@ claiming that hard cancellation exists today. Callers own product decisions.
 ## License
 
 Mozilla Public License 2.0 ([LICENSE](LICENSE)), like every Maelys repository.
-The provenance document records the Maelys implementations and corpora studied
-while designing this independent component.
+[`NOTICE`](NOTICE) carries the retained MIT notices of the codebases studied
+while designing this independent component, and
+[`docs/provenance.md`](docs/provenance.md) records the exact repositories,
+commits and extracted ideas behind them. [`LICENSING.md`](LICENSING.md) states
+what each part is licensed under.
+
+## Documentation
+
+The architecture, the security model, the client contract and the resolver
+provider design are not kept in this repository; they are published with the
+documentation of the other Maelys products. What stays here is what a machine
+writes and what this repository engages publicly, which `LICENSING.md` names.
