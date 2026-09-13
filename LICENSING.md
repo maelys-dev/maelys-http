@@ -31,11 +31,22 @@ repository writes outside them.
 
 ## Redistributed material
 
-*List here the pinned sources linked into the released artifacts, with their
-licenses, or state that this repository redistributes none.*
+This repository redistributes none. The release publishes one source archive
+of this tree and nothing else: Maelys System is pinned and built by the
+consumer, and Mbed TLS is resolved by the consumer through `pkg-config`, so
+neither reaches an artifact published here. The Homebrew formula names this
+repository's archive and declares `libmaelys-sys` and `mbedtls` as
+dependencies Homebrew fetches itself.
 
 ## Documents engaged publicly
 
-*List here the documents of this repository that its published packages,
-site or formula reference. A document named here stays in this repository;
-prose that is not engaged migrates to `maelys-docs/maelys-http/`.*
+- [`docs/provenance.md`](docs/provenance.md), named by [`NOTICE`](NOTICE) as
+  where the exact repositories, commits and extracted ideas behind the
+  retained MIT notices are recorded. `NOTICE` ships inside the released source
+  archive and its attribution chain has to be followable by whoever holds that
+  archive, so this document stays here. It is engaged by `NOTICE` rather than
+  by `LICENSING.md` itself, and is named here because this is the file the
+  classification reads.
+
+Everything else under `docs/` that is prose belongs in
+`maelys-docs/maelys-http/`.
