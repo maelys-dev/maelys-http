@@ -25,7 +25,12 @@
   them. The `clang` jobs and the macOS TLS job link against Maelys System and
   never touch Mbed TLS, whose checkout carries its submodules; a macOS minute
   bills as ten.
-- Adopted socle v0.46.1, from v0.42.0.
+- Adopted socle v0.47.0, from v0.42.0. `preflight` now answers, before there is
+  a tag to answer about, whether the tap jobs will see their credentials —
+  reading it from this repository's side, which is the side the job will be
+  standing at. It says `maelys-dev/maelys-http sees HOMEBREW_TAP_TOKEN: its tap
+  jobs will push`, which is the sentence a green run that pushed nothing would
+  have contradicted.
 
 ### Security
 
