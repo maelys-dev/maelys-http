@@ -15,7 +15,7 @@ permissions:
 
 jobs:
   check:
-    uses: maelys-dev/maelys-release/.github/workflows/check-product.yml@ce533fdf22389c08a056a3becea55c1b1bbfbf0b # v0.47.0
+    uses: maelys-dev/maelys-release/.github/workflows/check-product.yml@ee3919f169c7583e53685a62ad40341c7deda974 # untagged
     with:
       product: maelys-http
       check_command: make check install-check
@@ -84,3 +84,11 @@ jobs:
         run: brew install mbedtls
       - name: Physical TLS lifecycle
         run: make clean tls-integration REQUIRE_MBEDTLS=1
+
+  legs:
+    # Written by maelys-release adopt from [check] of maelys-release.conf; each leg
+    # reports as 'legs / NAME'. Declare there, never here.
+    uses: maelys-dev/maelys-release/.github/workflows/check-legs.yml@ee3919f169c7583e53685a62ad40341c7deda974 # untagged
+    with:
+      product: maelys-http
+      legs: '[{"name": "clang", "platform": "linux", "command": "make check CC=clang CXX=clang++"}, {"name": "plain-macos", "platform": "macos", "command": "make check"}]'
