@@ -16,9 +16,14 @@
   The GitHub runner images carry both, so nothing ever failed; a rehearsal of
   linux-arm64 in a bare `ubuntu:26.04` container said `python3: not found`
   before the first tag that would have verified there.
-- Adopted socle v0.57.0, from v0.47.0. The check legs renamed in v0.54.0 report
+- Adopted socle v0.57.1, from v0.47.0. The check legs renamed in v0.54.0 report
   under their former names too, so the adoption removes nothing `main`
   requires; `protect --apply` swaps each alias for its leg after the merge.
+  v0.57.1 fixes that command rewriting a whole classic protection to change
+  its checks: run here at v0.57.0, it rewrote `main`'s, and a reading of the
+  result against the state recorded before the first run found nothing lost —
+  `strict` was already `false`, and pull requests, signed commits,
+  `enforce_admins` and conversation resolution are all still required.
 
 - **The prose moves out of `docs/`.** The architecture, the security model, the
   client contract, the resolver provider design, the ABI policy and the
