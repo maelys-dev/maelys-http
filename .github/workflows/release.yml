@@ -1,6 +1,6 @@
 name: release
 
-# Managed by maelys-release v0.47.0 (0.47.0). Regenerate with
+# Managed by maelys-release v0.57.0 (0.57.0). Regenerate with
 # 'maelys-release adopt' of maelys-release; do not edit by hand.
 on:
   push:
@@ -19,7 +19,7 @@ permissions:
 
 jobs:
   release:
-    uses: maelys-dev/maelys-release/.github/workflows/release.yml@ce533fdf22389c08a056a3becea55c1b1bbfbf0b # v0.47.0
+    uses: maelys-dev/maelys-release/.github/workflows/release.yml@4c3ebc3269b4689011bbda4d02a77f8f4b9163b0 # v0.57.0
     permissions:
       contents: write
       id-token: write
@@ -30,9 +30,9 @@ jobs:
       dependency_checkout: |
         sh scripts/checkout-dependencies.sh "$RUNNER_TEMP/dependencies" >>"$GITHUB_ENV"
       verify_command: bash scripts/verify-release.sh TARGET
-      linux_packages: build-essential dpkg-dev file rpm pkg-config cmake
+      linux_packages: build-essential dpkg-dev file rpm pkg-config cmake python3 openssl
       macos_packages: pkg-config mbedtls
-      targets: '[{"target": "linux-x86_64"}]'
+      targets: '[{"target": "linux-x86_64"}, {"target": "linux-arm64", "package": false}, {"target": "macos-arm64", "package": false}]'
       manifest_patterns: '*.tar.gz *.deb *.rpm *.tar *.spdx.json'
       sbom_pattern: '*.spdx.json'
       commit_verification: signed-on-default-branch
@@ -40,7 +40,7 @@ jobs:
   tap-libmaelys-http:
     needs: release
     if: needs.release.result == 'success'
-    uses: maelys-dev/maelys-release/.github/workflows/tap.yml@ce533fdf22389c08a056a3becea55c1b1bbfbf0b # v0.47.0
+    uses: maelys-dev/maelys-release/.github/workflows/tap.yml@4c3ebc3269b4689011bbda4d02a77f8f4b9163b0 # v0.57.0
     permissions:
       contents: write
       id-token: write

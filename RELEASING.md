@@ -9,12 +9,12 @@ what it runs lives in `scripts/`.
 
 `maelys-release.conf` holds the reasoning as well as the values.
 
-- **One packaging target**, `linux-x86_64`. The release artifact is a source
-  archive, and source has no target: `git archive` writes the same tar
-  everywhere, gzip does not, and three runners compressing one tree into three
-  different archives is a clash the socle refuses. The three targets still gate
-  every commit through `ci.yml`, and a tag is only ever pushed onto a commit
-  those checks passed.
+- **Three targets verify, one packages** (`[package] linux-x86_64`). At the
+  tag, linux-x86_64, linux-arm64 and macos-arm64 each replay the source,
+  install and TLS gates. Only linux-x86_64 builds the archive: the release
+  artifact is a source archive, `git archive` writes the same tar everywhere
+  but gzip does not, and three runners compressing one tree into three
+  different archives is a clash the socle refuses.
 - **`*.tar` and `*.spdx.json`** beyond the socle's `*.tar.gz`. What the
   manifest does not name is attested and never published.
 - **`*.spdx.json` as the SBOM**, attested against the file the document itself
@@ -93,15 +93,16 @@ tag does not yet exist.
    --apply` signs the tag on that merge commit.
 4. The socle's `verify` job checks `VERSION` against the tag, that the tag is
    annotated and verified by GitHub, and that it names the checked-out commit.
-5. The `build` job materialises every pin under `$RUNNER_TEMP/dependencies`
-   with `scripts/checkout-dependencies.sh` and exports the root, then runs
-   `scripts/verify-release.sh linux-x86_64` — the allowlist above, then `make
-   check install-check check-system-pin` and `make tls-integration
-   REQUIRE_MBEDTLS=1` against the Mbed TLS commit `dependencies/mbedtls.pin`
-   names, built by `scripts/build-pinned-mbedtls.sh` — and only then runs
+5. The `build` job runs once per target. Each materialises every pin under
+   `$RUNNER_TEMP/dependencies` with `scripts/checkout-dependencies.sh`, exports
+   the root, and runs `scripts/verify-release.sh TARGET` — the allowlist above,
+   then `make check install-check check-system-pin` and `make tls-integration
+   REQUIRE_MBEDTLS=1`, against the Mbed TLS commit `dependencies/mbedtls.pin`
+   names on Linux, built by `scripts/build-pinned-mbedtls.sh`, and against
+   Homebrew's on macOS. Only linux-x86_64 then runs
    `scripts/package-release.sh`, which writes the archives, their digests, the
-   reproducibility check, the SBOM and the build of the extracted archive. It
-   holds no write token.
+   reproducibility check, the SBOM and the build of the extracted archive. No
+   build job holds a write token.
 6. The `publish` job waits for the reviewer, downloads what `build` produced,
    re-verifies every digest, writes `SHA256SUMS` and creates the release. It is
    the only job that may write.
@@ -145,3 +146,12 @@ eval "$(sh scripts/checkout-dependencies.sh "$PWD/../maelys-http-deps")"
 the script, refreshes a root that already exists instead of refusing it. From
 there `make check`, `bash scripts/verify-release.sh <target>` and `bash
 scripts/package-release.sh` are exactly what the release runs.
+
+Before a tag that changes the release or its packaging, replay the Linux build
+job in a bare container, where nothing the runner image happens to carry can
+hide an undeclared tool:
+
+```sh
+maelys-release rehearse . linux-arm64 --check --check-command "bash scripts/verify-release.sh linux-arm64"
+maelys-release rehearse . linux-x86_64
+```

@@ -4,6 +4,22 @@
 
 ### Changed
 
+- **The tag verifies on three targets again, and packages on one.** Socle
+  v0.55.0 split the declaration that governed both: every target runs
+  `scripts/verify-release.sh`, and `[package] linux-x86_64` is the only one that
+  builds the archive. linux-arm64 and macos-arm64 replay the source, install and
+  TLS gates at the tag, which this repository had given up at 0.1.14 to avoid
+  three gzip archives of one tree clashing at assembly.
+- **`python3` and `openssl` are declared** in `dependencies/packages` for Linux.
+  The TLS integration test signs its certificate with the `openssl` command and
+  serves it from a Python script, and `generate-sbom.sh` uses `python3` too.
+  The GitHub runner images carry both, so nothing ever failed; a rehearsal of
+  linux-arm64 in a bare `ubuntu:26.04` container said `python3: not found`
+  before the first tag that would have verified there.
+- Adopted socle v0.57.0, from v0.47.0. The check legs renamed in v0.54.0 report
+  under their former names too, so the adoption removes nothing `main`
+  requires; `protect --apply` swaps each alias for its leg after the merge.
+
 - **The prose moves out of `docs/`.** The architecture, the security model, the
   client contract, the resolver provider design, the ABI policy and the
   consumer notes are published with the documentation of the other Maelys
@@ -43,13 +59,6 @@
   them. The `clang` jobs and the macOS TLS job link against Maelys System and
   never touch Mbed TLS, whose checkout carries its submodules; a macOS minute
   bills as ten.
-- Adopted socle v0.47.0, from v0.42.0. `preflight` now answers, before there is
-  a tag to answer about, whether the tap jobs will see their credentials —
-  reading it from this repository's side, which is the side the job will be
-  standing at. It says `maelys-dev/maelys-http sees HOMEBREW_TAP_TOKEN: its tap
-  jobs will push`, which is the sentence a green run that pushed nothing would
-  have contradicted.
-
 ### Security
 
 - **`[commit] signed-on-default-branch`.** The release now asks that the commit
