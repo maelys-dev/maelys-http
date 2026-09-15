@@ -6,6 +6,13 @@
 [linux]
 pkg-config
 cmake
+# The TLS integration test signs a throwaway certificate with the openssl
+# command and serves it from tests/https_server.py; generate-sbom.sh formats
+# the SBOM's creation time and validates its JSON with python3. The runner
+# images happen to carry both, which is why nothing failed until a bare
+# ubuntu:26.04 rehearsal of linux-arm64 said python3: not found.
+python3
+openssl
 [macos]
 pkg-config
 mbedtls
