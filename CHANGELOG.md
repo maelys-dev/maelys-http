@@ -4,6 +4,18 @@
 
 ### Changed
 
+- **No public file of this repository names the private documentation
+  repository any more.** Socle v0.58.0 took the name out of the managed blocks
+  of `AGENTS.md` and `CLAUDE.md`, which are as public as the README and carried
+  it under a bullet forbidding exactly that. `LICENSING.md` carried it too, in
+  a sentence written here while filling in the socle's skeleton, which still
+  names it; that sentence now says where the prose is without naming where.
+- `main`'s branch protection was compared, setting by setting, with the payload
+  that first created it on 9 September. Socle v0.58.0 says `protect --apply`
+  wrote its own shape over every classic protection from v0.43.0 to v0.57.0,
+  and this repository ran it at both ends of that range. All fifteen settings
+  are what they were: the original payload happened to be that shape.
+
 - **The tag verifies on three targets again, and packages on one.** Socle
   v0.55.0 split the declaration that governed both: every target runs
   `scripts/verify-release.sh`, and `[package] linux-x86_64` is the only one that
@@ -16,7 +28,7 @@
   The GitHub runner images carry both, so nothing ever failed; a rehearsal of
   linux-arm64 in a bare `ubuntu:26.04` container said `python3: not found`
   before the first tag that would have verified there.
-- Adopted socle v0.57.1, from v0.47.0. The check legs renamed in v0.54.0 report
+- Adopted socle v0.59.1, from v0.47.0. The check legs renamed in v0.54.0 report
   under their former names too, so the adoption removes nothing `main`
   requires; `protect --apply` swaps each alias for its leg after the merge.
   v0.57.1 fixes that command rewriting a whole classic protection to change

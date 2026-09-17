@@ -48,5 +48,5 @@ dependencies Homebrew fetches itself.
   by `LICENSING.md` itself, and is named here because this is the file the
   classification reads.
 
-Everything else under `docs/` that is prose belongs in
-`maelys-docs/maelys-http/`.
+Everything else under `docs/` that is prose is published with the
+documentation of the other Maelys products, and not kept here.
