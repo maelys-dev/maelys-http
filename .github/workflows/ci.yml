@@ -84,3 +84,35 @@ jobs:
         run: brew install mbedtls
       - name: Physical TLS lifecycle
         run: make clean tls-integration REQUIRE_MBEDTLS=1
+
+  # The 4.x line, built from source on Linux as the 3.6 line is in the job
+  # above. providers/mbedtls_version_policy.h accepts both lines, and until
+  # this job only macOS exercised 4.x, through whatever Homebrew ships that
+  # day: a regression against 4.x on Linux, or against a 4.x Homebrew has
+  # moved past, had nowhere to show. dependencies/mbedtls-4.pin names the
+  # commit. The name says what is tested and not which image runs it, so an
+  # image upgrade never renames a check that main requires.
+  mbedtls-4:
+    name: mbedtls-4 (linux)
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Pinned dependencies
+        run: |
+          sh scripts/checkout-dependency.sh maelys-system "$RUNNER_TEMP/dependencies/maelys-system"
+          sh scripts/checkout-dependency.sh mbedtls-4 "$RUNNER_TEMP/dependencies/mbedtls-4"
+          echo "MAELYS_DEPENDENCIES_DIR=$RUNNER_TEMP/dependencies" >>"$GITHUB_ENV"
+      # Mbed TLS 4 generates part of its sources at build time, from a git
+      # checkout, with Python modules the 3.6 line never asked for.
+      - name: Install packages
+        run: |
+          sudo apt-get update || echo "::warning::apt-get update reported errors; the install decides"
+          sudo apt-get install -y pkg-config cmake python3-jsonschema python3-jinja2
+      - name: Pinned Mbed TLS 4
+        run: |
+          directory=$(sh scripts/build-pinned-mbedtls.sh --print mbedtls-4)
+          # The job is worth nothing if it quietly links the 3.6 line.
+          PKG_CONFIG_PATH="$directory" pkg-config --atleast-version=4 mbedtls
+          echo "PKG_CONFIG_PATH=$directory" >>"$GITHUB_ENV"
+      - name: Physical TLS lifecycle
+        run: make clean tls-integration REQUIRE_MBEDTLS=1
