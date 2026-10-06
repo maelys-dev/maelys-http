@@ -38,13 +38,13 @@ allowlists and relay policy remain outside.
 
 ## Maelys System dependency
 
-The H2 client consumes the Maelys System 0.9 socket, descriptor wait, wakeup
-and deadline APIs. System remains ABI 1. The signed
-`v0.9.1` release commit
-`6663c83a5f6035055b72d3ad0067ac2ad306fc2e` is recorded in
-`dependencies/maelys-system.pin`, which the Makefile, the SBOM and every
-checkout read. No internal System symbol is
-consumed.
+The H2 client consumes the socket, descriptor wait, wakeup and deadline APIs
+Maelys System introduced in its 0.9 series. System remains ABI 1. The signed
+release tag and the commit it names are recorded in
+`dependencies/maelys-system.pin` and nowhere else: the Makefile, the SBOM, the
+pkg-config floor, the Homebrew formula and every checkout read that file, so
+this page does not repeat a commit that a re-pin would leave stale. No
+internal System symbol is consumed.
 
 The source attributions above are retained even though the new implementation
 was written for this repository rather than copied as a wholesale file.

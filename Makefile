@@ -311,6 +311,7 @@ install: all
 	sed -e 's|@PREFIX@|$(PREFIX)|g' -e 's|@VERSION@|$(VERSION)|g' \
 		pkgconfig/maelys-http.pc.in > $(DESTDIR)$(PREFIX)/lib/pkgconfig/maelys-http.pc
 	sed -e 's|@PREFIX@|$(PREFIX)|g' -e 's|@VERSION@|$(VERSION)|g' \
+		-e 's|@SYSTEM_MIN_VERSION@|$(SYSTEM_REQUIRED_VERSION)|g' \
 		pkgconfig/maelys-http-client.pc.in > \
 		$(DESTDIR)$(PREFIX)/lib/pkgconfig/maelys-http-client.pc
 
