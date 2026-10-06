@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+### Dependencies
+
+- **maelys-system moves from v0.11.0 to v0.12.0**, commit
+  `79f1ce4825f2dd80f628ed7d58599eb17f0d2f4a`, still ABI 1. It was tagged
+  seventeen minutes after 0.1.15 was published. v0.12.0 adds directory
+  watching, which this library does not call, and makes a byte-only
+  `maelys_sys_socket_receive` on a Unix socket unable to fail after it has
+  read. This library calls that function, on the TCP sockets its connector
+  opens and on no Unix socket, so its behaviour here is unchanged; the pin
+  moves so that a consumer linking both libraries builds against one System.
+
 ## 0.1.15 - 2026-10-06
 
 No change to the codec, the client or ABI 1. This release moves the pins,
