@@ -2,6 +2,8 @@
 # Replays this product's gates on the exact commit a tag names, before any
 # byte is packaged, for one TARGET of the release matrix. The socle's release
 # workflow runs it as its verify_command; a developer can run it by hand.
+# Who may sign the tag is not asked here: the socle's verify job answers that
+# against its own allowed-signers list before any build job starts.
 #
 # TARGET is the socle's target name (linux-x86_64, linux-arm64, macos-arm64)
 # and selects where Mbed TLS comes from: the Linux distribution ships it
@@ -18,10 +20,6 @@ esac
 
 root=$(CDPATH='' cd -- "$(dirname "$0")/.." && pwd)
 cd "$root"
-
-# Who published this, before what was published is built. A tag no key of
-# .github/release-allowed-signers signed stops here, with nothing packaged.
-sh scripts/verify-tag-signature.sh
 
 # The pinned checkouts live apart from this repository, under the root the
 # socle materialises and exports; the Makefile derives SYSTEM_DIR from it.
@@ -44,4 +42,4 @@ make check install-check check-system-pin
 # target into a skip, and the release would report a success that proved
 # nothing about TLS.
 make tls-integration REQUIRE_MBEDTLS=1
-echo "verify-release: $target passed the tag, source, install and TLS gates"
+echo "verify-release: $target passed the source, install and TLS gates"
