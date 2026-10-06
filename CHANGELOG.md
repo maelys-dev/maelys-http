@@ -1,6 +1,30 @@
 # Changelog
 
-## Unreleased
+## 0.1.15 - 2026-10-06
+
+No change to the codec, the client or ABI 1. This release moves the pins,
+restores the verification of all three targets at the tag, and carries what
+the repository learned about its own release since 0.1.14.
+
+### Dependencies
+
+- **maelys-system moves from v0.9.1 to v0.11.0**, commit
+  `c7d13e554353958adb121f5e59a7dba3d6df7b79`, still ABI 1. v0.10.0 and
+  v0.11.0 add descriptor passing, which this library does not call. v0.10.1 is
+  a security fix that statically linked consumers must rebuild to receive:
+  a byte-only receive on an `AF_UNIX` socket now consumes control data and
+  closes descriptors a peer attached, where macOS installed them unseen. This
+  library's connector opens no `AF_UNIX` socket, so nothing here was exposed;
+  a consumer that builds its own transport on System's sockets is the one
+  that needed it. The Homebrew formula builds against `libmaelys-sys`, which
+  the tap already serves at v0.11.0.
+- The pkg-config floor of `maelys-http-client` is rendered from
+  `dependencies/maelys-system.pin` instead of typed: it read `maelys-sys >=
+  0.9.1` in a file a re-pin did not touch. The README and `docs/provenance.md`
+  no longer repeat the tag and the commit either, and the README's build
+  instructions stop cloning Maelys System beside this repository, which
+  `[dependencies] apart` has refused to read since the entries below.
+- mbedtls stays at v3.6.7, the latest release of the 3.6 line.
 
 ### Changed
 
@@ -28,7 +52,7 @@
   The GitHub runner images carry both, so nothing ever failed; a rehearsal of
   linux-arm64 in a bare `ubuntu:26.04` container said `python3: not found`
   before the first tag that would have verified there.
-- Adopted socle v0.59.1, from v0.47.0. The check legs renamed in v0.54.0 report
+- Adopted socle v0.62.3, from v0.47.0. The check legs renamed in v0.54.0 report
   under their former names too, so the adoption removes nothing `main`
   requires; `protect --apply` swaps each alias for its leg after the merge.
   v0.57.1 fixes that command rewriting a whole classic protection to change

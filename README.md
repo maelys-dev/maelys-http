@@ -31,17 +31,20 @@ neither advertises nor accepts `h2`.
 
 ## Build
 
-The current integration requires Maelys System 0.9 (ABI 1) and pins the
-exact commit named by the signed `v0.9.1` tag. The public System history was
+The current integration requires Maelys System (ABI 1) at the exact commit
+`dependencies/maelys-system.pin` names: the signed tag on its first line, the
+commit that tag points at on its second. The public System history was
 restarted on 2026-09-03; only tags published after that date are valid pins.
 
+The pinned checkouts live apart from this repository, never beside it, and one
+line both writes them and says where they are:
+
 ```sh
-git clone https://github.com/maelys-dev/maelys-system.git
-git -C maelys-system switch --detach 6663c83a5f6035055b72d3ad0067ac2ad306fc2e
 git clone https://github.com/maelys-dev/maelys-http.git
-make -C maelys-system
-make -C maelys-http check SYSTEM_DIR=../maelys-system
-make -C maelys-http sanitizers SYSTEM_DIR=../maelys-system
+cd maelys-http
+eval "$(sh scripts/checkout-dependencies.sh "$PWD/../maelys-http-deps")"
+make check
+make sanitizers
 ```
 
 The Mbed TLS module is optional. Its security floor is Mbed TLS 3.6.7 or
