@@ -36,8 +36,10 @@ what it runs lives in `scripts/`.
 
 - Protect `main` and require review for workflow and release-key changes.
 - Restrict creation and deletion of `v*` tags to release maintainers.
-- Keep maintainer SSH public keys in `.github/release-allowed-signers`; rotate a
-  key through a separately reviewed, signed commit before using it on a tag.
+- The keys that may sign a release are the socle's list,
+  `share/allowed-signers` of maelys-release, read at the socle commit this
+  repository pins. A key is added or rotated there, and reaches this
+  repository at its next adoption.
 - Require signed commits on `main`.
 - Require a reviewer on the `release` environment, which is where the
   publication waits.
@@ -50,35 +52,29 @@ workflow definition.
 
 GitHub reports a tag as verified when *any* key *any* account registered signed
 it. That says a signature is genuine; it does not say the signer may release
-this product. The allowlist is this repository's own answer, and
-`scripts/verify-tag-signature.sh` is where it is enforced — inside
-`scripts/verify-release.sh`, which the socle runs as its `verify_command`
-before a single byte is packaged. It proves, on the runner:
+this product. The socle answers the second question, in its `verify` job,
+before any build job starts:
 
-1. the tag is annotated and names the checked-out commit;
-2. its signature is SSH, since `gpg.ssh.allowedSignersFile` governs no other
-   kind and git picks its backend from the signature header, so an OpenPGP tag
-   would bypass the list instead of being measured against it;
-3. that signature verifies against `.github/release-allowed-signers` **read
-   from the default branch**, never from the tagged commit — read from the tag
-   it would authorise itself, since whoever can push adds a key, tags that
-   commit with it and passes;
-4. the commit is an ancestor of the default branch, so a tag cannot publish a
-   commit that never landed.
+1. the tag is annotated, verified by GitHub, equal to `VERSION`, and names the
+   checked-out commit;
+2. its signature is SSH and verifies against `share/allowed-signers` of
+   maelys-release, read at the socle commit `release.yml` pins — so the list
+   travels with the version this repository adopted, and a retired key is
+   judged at the moment GitHub saw the tag, not at a date its signer wrote;
+3. the commit carries its own verified signature and is an ancestor of the
+   default branch, because `maelys-release.conf` declares
+   `[commit] signed-on-default-branch`.
 
-The socle asserts that last point too, since `maelys-release.conf` declares
-`[commit] signed-on-default-branch`, and adds what this script cannot: the
-commit's own signature, verified by GitHub, which needs an API token the
-`verify_command` step is not given. The two overlap deliberately — the socle
-asks earlier and knows more, this script keeps working when run by hand — and
-what only this script answers is the first three points. GitHub says a
-signature is genuine; the allowlist says whose signature may publish.
+This repository carried the first two points itself from 0.1.13 to 0.1.15, in
+`scripts/verify-tag-signature.sh` and `.github/release-allowed-signers`, while
+the socle had no such list. It has had one since v0.62.0, the 0.1.15 release
+passed through both, and two lists naming one key are one list too many: the
+second is where a rotation gets forgotten.
 
-Run `scripts/check-signing-key.sh` **before** creating the tag. A tag the
-release refuses is a tag that is burned: the conventions forbid moving a
-published tag, and no replay ever passes a signature the allowlist does not
-name, so the version is consumed for nothing. That script answers while the
-tag does not yet exist.
+`maelys-release preflight .` says, before there is a tag, whether the key this
+checkout would sign with is named in that list. A tag the release refuses is a
+tag that is burned, since a published tag is never moved, and `cut` asks the
+same question before it signs.
 
 ## Release sequence
 
@@ -89,14 +85,13 @@ tag does not yet exist.
    linux-x86_64, linux-arm64 and macos-arm64, the second compiler on both Linux
    architectures, and the physical TLS lifecycle against pinned Mbed TLS on
    Linux and Homebrew's on macOS.
-3. `scripts/check-signing-key.sh`, then `maelys-release cut . X.Y.Z --tag
-   --apply` signs the tag on that merge commit.
-4. The socle's `verify` job checks `VERSION` against the tag, that the tag is
-   annotated and verified by GitHub, and that it names the checked-out commit.
+3. `maelys-release cut . X.Y.Z --tag --apply` checks the signing key against
+   the socle's list, then signs the tag on that merge commit.
+4. The socle's `verify` job runs the three checks of the previous section.
 5. The `build` job runs once per target. Each materialises every pin under
    `$RUNNER_TEMP/dependencies` with `scripts/checkout-dependencies.sh`, exports
-   the root, and runs `scripts/verify-release.sh TARGET` — the allowlist above,
-   then `make check install-check check-system-pin` and `make tls-integration
+   the root, and runs `scripts/verify-release.sh TARGET` — `make check
+   install-check check-system-pin` and `make tls-integration
    REQUIRE_MBEDTLS=1`, against the Mbed TLS commit `dependencies/mbedtls.pin`
    names on Linux, built by `scripts/build-pinned-mbedtls.sh`, and against
    Homebrew's on macOS. Only linux-x86_64 then runs
@@ -123,10 +118,9 @@ ever computes. It is also why the tap job needs the release job.
 A published tag is never moved, recreated or force-pushed. Run the `release`
 workflow with `workflow_dispatch` and the existing tag: the socle redrafts the
 release, empties its assets and fills it again, so a replay never leaves an
-asset of a former attempt behind. `scripts/verify-tag-signature.sh` resolves
-the tag from `VERSION` rather than from the triggering ref, and
-`scripts/render-homebrew-formula.sh` reads the tag's own published bytes, so
-both behave identically whether the run came from a tag push or a dispatch.
+asset of a former attempt behind. `scripts/render-homebrew-formula.sh` reads
+the tag's own published bytes, so it behaves identically whether the run came
+from a tag push or a dispatch.
 
 Never bypass a failed verification, pin, Mbed TLS security-floor or checksum
 check. A distribution build may define

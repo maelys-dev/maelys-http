@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+### Security
+
+- **One list of keys may sign a release, and it is the socle's.**
+  `scripts/verify-tag-signature.sh`, `scripts/check-signing-key.sh` and
+  `.github/release-allowed-signers` are removed. They existed because the
+  socle proved a tag genuine and never asked whether its signer might publish;
+  since socle v0.62.0 its `verify` job asks exactly that, against
+  `share/allowed-signers` at the pinned socle commit, before any build starts,
+  and `preflight` and `cut` ask it before the tag exists. The 0.1.15 release
+  passed through both checks. Nothing is weaker: the socle also refuses a
+  signature that is not SSH, and `[commit] signed-on-default-branch` still
+  requires the commit to have landed on `main`. What the socle's list adds is
+  rotation — a retired key keeps its past tags valid, judged at the moment
+  GitHub saw the tag. What two lists added was a second place to forget one.
+
 ### Dependencies
 
 - **maelys-system moves from v0.11.0 to v0.12.0**, commit
