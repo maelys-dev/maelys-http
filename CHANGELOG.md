@@ -27,6 +27,16 @@
   read. This library calls that function, on the TCP sockets its connector
   opens and on no Unix socket, so its behaviour here is unchanged; the pin
   moves so that a consumer linking both libraries builds against one System.
+- **mbedtls-4 is pinned at v4.2.0**, commit
+  `ece41aa84d7879d7e55c59e955a5884b541f7f3b`, beside mbedtls v3.6.7, which does
+  not move. It is a test dependency and nothing published links it: a new CI
+  job, `mbedtls-4 (linux)`, builds that commit from source and runs the TLS
+  integration against it. `providers/mbedtls_version_policy.h` accepts the 3.6
+  and the 4.x lines, and until now only macOS exercised 4.x, through whatever
+  Homebrew shipped that day. Building 4.x from a git checkout needs the Python
+  modules `jsonschema` and `jinja2`, which the 3.6 line never asked for; the
+  job installs them itself. `scripts/build-pinned-mbedtls.sh` takes the name
+  of the pin to build.
 
 ## 0.1.15 - 2026-10-06
 
