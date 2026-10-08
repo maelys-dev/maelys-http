@@ -1,6 +1,10 @@
 # Changelog
 
-## Unreleased
+## 0.1.16 - 2026-10-08
+
+No change to the codec, the client or ABI 1. This release moves Maelys System
+to the 0.12 series, tests the TLS provider against Mbed TLS 4.x on Linux as
+well as 3.6, and hands the question of who may sign a release to the socle.
 
 ### Security
 
@@ -19,14 +23,17 @@
 
 ### Dependencies
 
-- **maelys-system moves from v0.11.0 to v0.12.0**, commit
-  `79f1ce4825f2dd80f628ed7d58599eb17f0d2f4a`, still ABI 1. It was tagged
-  seventeen minutes after 0.1.15 was published. v0.12.0 adds directory
-  watching, which this library does not call, and makes a byte-only
-  `maelys_sys_socket_receive` on a Unix socket unable to fail after it has
-  read. This library calls that function, on the TCP sockets its connector
-  opens and on no Unix socket, so its behaviour here is unchanged; the pin
-  moves so that a consumer linking both libraries builds against one System.
+- **maelys-system moves from v0.11.0 to v0.12.3**, commit
+  `f6a6b63f2108b22df10519215c143c867ecb5162`, still ABI 1. The 0.12 series
+  adds directory watching and corrects the fairness of
+  `maelys_sys_loop_step`; this library calls neither. Of what it does call,
+  one behaviour moves: a byte-only `maelys_sys_socket_receive` on a Unix
+  socket can no longer fail after it has read, and the connector here opens
+  TCP sockets only. The headers of 0.12.2 and 0.12.3 now state that a wakeup
+  is signalled between threads and never from a signal handler, which is the
+  only way this library uses one: the resolver's worker thread signals the
+  thread that waits. The pin moves so that a consumer linking both libraries
+  builds against one System, and the tap serves `libmaelys-sys` at v0.12.3.
 - **mbedtls-4 is pinned at v4.2.0**, commit
   `ece41aa84d7879d7e55c59e955a5884b541f7f3b`, beside mbedtls v3.6.7, which does
   not move. It is a test dependency and nothing published links it: a new CI
@@ -37,8 +44,8 @@
   modules `jsonschema` and `jinja2`, which the 3.6 line never asked for; the
   job installs them itself. `scripts/build-pinned-mbedtls.sh` takes the name
   of the pin to build.
-- The mbedtls-4 pin is marked `on-request`, and the socle moves to v0.63.0,
-  which reads that line. A pin one job reads was cloned by every job that
+- The mbedtls-4 pin is marked `on-request`, and the socle moves to v0.63.1;
+  v0.63.0 is the version that reads that line. A pin one job reads was cloned by every job that
   clones the pins: the five of the shared check on each pull request, and the
   three builds of a release. Measured here, the checkout step went from 9 to
   19 seconds on macOS and from 6 to as much as 52 on Linux, for a tree nothing
