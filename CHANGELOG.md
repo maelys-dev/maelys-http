@@ -37,6 +37,17 @@
   modules `jsonschema` and `jinja2`, which the 3.6 line never asked for; the
   job installs them itself. `scripts/build-pinned-mbedtls.sh` takes the name
   of the pin to build.
+- The mbedtls-4 pin is marked `on-request`, and the socle moves to v0.63.0,
+  which reads that line. A pin one job reads was cloned by every job that
+  clones the pins: the five of the shared check on each pull request, and the
+  three builds of a release. Measured here, the checkout step went from 9 to
+  19 seconds on macOS and from 6 to as much as 52 on Linux, for a tree nothing
+  in those jobs opened. This repository reported it with those figures, and
+  the socle answered with the attribute: its loop now skips such a pin and
+  says so, the job that needs it still clones it by name, and `check` and
+  `cut` still hold its tag and commit. The loop also prints how long each
+  clone took, so the next cost of this kind does not need two runs compared
+  to be seen.
 
 ## 0.1.15 - 2026-10-06
 
