@@ -23,17 +23,19 @@ well as 3.6, and hands the question of who may sign a release to the socle.
 
 ### Dependencies
 
-- **maelys-system moves from v0.11.0 to v0.12.3**, commit
-  `f6a6b63f2108b22df10519215c143c867ecb5162`, still ABI 1. The 0.12 series
+- **maelys-system moves from v0.11.0 to v0.13.0**, commit
+  `c15ff2f4605a43375916a0459a158dd7c790a34f`, still ABI 1. The 0.12 series
   adds directory watching and corrects the fairness of
-  `maelys_sys_loop_step`; this library calls neither. Of what it does call,
-  one behaviour moves: a byte-only `maelys_sys_socket_receive` on a Unix
-  socket can no longer fail after it has read, and the connector here opens
-  TCP sockets only. The headers of 0.12.2 and 0.12.3 now state that a wakeup
-  is signalled between threads and never from a signal handler, which is the
-  only way this library uses one: the resolver's worker thread signals the
-  thread that waits. The pin moves so that a consumer linking both libraries
-  builds against one System, and the tap serves `libmaelys-sys` at v0.12.3.
+  `maelys_sys_loop_step`, and 0.13.0 adds process launching; this library
+  calls none of them. Of what it does call, `maelys_sys_socket_receive`
+  moves twice, on Unix sockets only — it can no longer fail after it has
+  read, and on a datagram socket an empty datagram is no longer taken for
+  the end of a stream — and the connector here opens TCP sockets only. The
+  headers now state that a wakeup is signalled between threads and never
+  from a signal handler, which is the only way this library uses one: the
+  resolver's worker thread signals the thread that waits. The pin moves so
+  that what this repository tests is what Homebrew builds against: the tap
+  serves `libmaelys-sys` at v0.13.0.
 - **mbedtls-4 is pinned at v4.2.0**, commit
   `ece41aa84d7879d7e55c59e955a5884b541f7f3b`, beside mbedtls v3.6.7, which does
   not move. It is a test dependency and nothing published links it: a new CI
