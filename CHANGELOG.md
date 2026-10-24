@@ -4,12 +4,15 @@
 
 ### Dependencies
 
-- **maelys-system moves from v0.13.0 to v0.14.2**, commit
-  `9388e8eb65f96a4bfb5149fb4c3c5eda9de8f641`, still ABI 1. The 0.13.1 to
-  0.14.2 series concerns processes — a spawn that no longer leaks what the
+- **maelys-system moves from v0.13.0 to v0.14.3**, commit
+  `2a3a5c8f650c1c291a19f6d1ae44fd773e68f283`, still ABI 1. The 0.13.1 to
+  0.14.0 series concerns processes — a spawn that no longer leaks what the
   parent held, and owned process groups in `maelys/sys/owned.h` — which this
   library does not start; no function it calls moves. 0.14.1 and 0.14.2
-  carry the code of 0.14.0 unchanged.
+  carry the code of 0.14.0 unchanged, and 0.14.3 changes only how System
+  builds itself: concurrent makes on one build directory, and a build with a
+  fuzzer's flags. The pin follows the tap, which serves `libmaelys-sys` at
+  v0.14.3 and is what the formula builds against.
 - Adopted socle v0.64.7, from v0.63.1. v0.64.0 is the version that asks
   something: the two managed checkout scripts change, and a pin's
   `repository` line is now read strictly — one line, an https URL. Both
