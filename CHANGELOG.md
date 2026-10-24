@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased
+
+### Dependencies
+
+- **maelys-system moves from v0.13.0 to v0.14.2**, commit
+  `9388e8eb65f96a4bfb5149fb4c3c5eda9de8f641`, still ABI 1. The 0.13.1 to
+  0.14.2 series concerns processes — a spawn that no longer leaks what the
+  parent held, and owned process groups in `maelys/sys/owned.h` — which this
+  library does not start; no function it calls moves. 0.14.1 and 0.14.2
+  carry the code of 0.14.0 unchanged.
+- Adopted socle v0.64.7, from v0.63.1. v0.64.0 is the version that asks
+  something: the two managed checkout scripts change, and a pin's
+  `repository` line is now read strictly — one line, an https URL. Both
+  Mbed TLS pins already had that shape.
+
 ## 0.1.16 - 2026-10-08
 
 No change to the codec, the client or ABI 1. This release moves Maelys System
