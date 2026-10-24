@@ -1,6 +1,10 @@
 # Changelog
 
-## Unreleased
+## 0.1.17 - 2026-10-24
+
+No change to the codec, the client or ABI 1. This release moves Maelys System
+to v0.14.3, the version the tap serves, so that what this repository tests is
+what Homebrew builds, and carries the socle's v0.64 checkout scripts.
 
 ### Dependencies
 
