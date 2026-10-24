@@ -1,6 +1,6 @@
 name: release
 
-# Managed by maelys-release v0.63.1 (0.63.1). Regenerate with
+# Managed by maelys-release v0.64.7 (0.64.7). Regenerate with
 # 'maelys-release adopt' of maelys-release; do not edit by hand.
 on:
   push:
@@ -19,7 +19,7 @@ permissions:
 
 jobs:
   release:
-    uses: maelys-dev/maelys-release/.github/workflows/release.yml@18ff37d4acce34b01a9371be4ccb4f38b812d9c8 # v0.63.1
+    uses: maelys-dev/maelys-release/.github/workflows/release.yml@a344a9a068ff3ec6ab33ba39f404c9dc1806b04e # v0.64.7
     permissions:
       contents: write
       id-token: write
@@ -40,7 +40,7 @@ jobs:
   tap-libmaelys-http:
     needs: release
     if: needs.release.result == 'success'
-    uses: maelys-dev/maelys-release/.github/workflows/tap.yml@18ff37d4acce34b01a9371be4ccb4f38b812d9c8 # v0.63.1
+    uses: maelys-dev/maelys-release/.github/workflows/tap.yml@a344a9a068ff3ec6ab33ba39f404c9dc1806b04e # v0.64.7
     permissions:
       contents: write
       id-token: write
