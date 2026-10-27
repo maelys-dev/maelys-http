@@ -1,6 +1,9 @@
 # Changelog
 
-## Unreleased
+## 0.1.18 - 2026-10-27
+
+One fix, in the Mbed TLS provider: with Mbed TLS 4, a request could lose its
+body to a TLS 1.3 session ticket. No change to the API or ABI 1.
 
 ### Fixed
 
@@ -15,6 +18,20 @@
   already read again. The TLS integration test posts a body one progress
   step at a time, which put the tickets in that window on every run before
   this fix.
+
+### Dependencies
+
+- **maelys-system moves from v0.14.3 to v0.14.4**, commit
+  `e22d04e64476d221f8cd6f74a6d62f5469417b27`, still ABI 1. v0.14.4 only
+  makes the path of its process keeper a build variable of its own; this
+  library neither installs nor calls the keeper. The pin follows the tap,
+  which serves `libmaelys-sys` at v0.14.4 and is what the formula builds
+  against.
+- Adopted socle v0.65.1, from v0.64.7. Nothing in it asks a gesture of this
+  repository. It carries v0.64.8: when `publish` is approved after the build
+  artifacts have expired, the run now says so and gives the replay on the
+  tag, instead of failing on a missing file. This repository reported that
+  failure after 0.1.16. The artifacts are still kept one day.
 
 ## 0.1.17 - 2026-10-24
 
