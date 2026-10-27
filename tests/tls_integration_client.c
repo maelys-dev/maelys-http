@@ -24,6 +24,82 @@ static maelys_http_sink_step_t capture_body(
     return MAELYS_HTTP_SINK_ACCEPT;
 }
 
+typedef struct source {
+    const char *bytes;
+    size_t length;
+    size_t offset;
+} source_t;
+
+static maelys_http_source_step_t fixed_source(
+    void *opaque, unsigned char *buffer, size_t capacity, size_t *out_length) {
+    source_t *source = opaque;
+    size_t count = source->length - source->offset;
+    if (!count) {
+        *out_length = 0u;
+        return MAELYS_HTTP_SOURCE_END;
+    }
+    if (count > capacity) count = capacity;
+    memcpy(buffer, source->bytes + source->offset, count);
+    source->offset += count;
+    *out_length = count;
+    return MAELYS_HTTP_SOURCE_DATA;
+}
+
+/* POST a fixed body one progress step per advance, pausing between advances
+ * so the server's TLS 1.3 NewSessionTicket records are queued before the
+ * upload probe reads, then the body is written after that read. */
+static maelys_http_result_t perform_paced_post(
+    maelys_http_client_t *client, const char *authority, const char *target,
+    const char *body, char **out_diagnostic) {
+    const struct timespec pace = {0, 5000000L};
+    maelys_http_request_t *request = NULL;
+    maelys_http_exchange_t *exchange = NULL;
+    capture_t capture = {{0}, 0u};
+    source_t source = {body, strlen(body), 0u};
+    uint64_t deadline = 0u;
+    maelys_http_result_t result;
+    size_t advances = 0u;
+    if (out_diagnostic) *out_diagnostic = NULL;
+    result = maelys_http_request_config_create(
+        "POST", "https", authority, target, &request);
+    if (result == MAELYS_HTTP_OK) {
+        result = maelys_http_request_set_fixed_body(
+            request, source.length, fixed_source, &source);
+    }
+    if (result == MAELYS_HTTP_OK) {
+        result = maelys_http_request_set_response_sink(
+            request, capture_body, &capture);
+    }
+    if (result == MAELYS_HTTP_OK &&
+        maelys_sys_deadline_after(5000u, &deadline) != MAELYS_SYS_OK) {
+        result = MAELYS_HTTP_ERR_IO;
+    }
+    if (result == MAELYS_HTTP_OK) {
+        result = maelys_http_exchange_create(
+            client, request, deadline, &exchange);
+    }
+    while (result == MAELYS_HTTP_OK || result == MAELYS_HTTP_AGAIN) {
+        result = maelys_http_exchange_advance(exchange);
+        if (result == MAELYS_HTTP_AGAIN) (void)nanosleep(&pace, NULL);
+        if (++advances >= 10000u && result == MAELYS_HTTP_AGAIN) {
+            result = MAELYS_HTTP_ERR_TIMEOUT;
+        }
+    }
+    if (result == MAELYS_HTTP_COMPLETE &&
+        (maelys_http_exchange_status(exchange) != 200u ||
+         capture.length != source.length ||
+         memcmp(capture.bytes, body, capture.length))) {
+        result = MAELYS_HTTP_ERR_IO;
+    }
+    if (result != MAELYS_HTTP_COMPLETE && out_diagnostic) {
+        const char *message = exchange ? maelys_http_exchange_error(exchange) : NULL;
+        *out_diagnostic = strdup(message ? message : maelys_http_result_string(result));
+    }
+    maelys_http_exchange_release(exchange);
+    maelys_http_request_release(request);
+    return result;
+}
+
 static maelys_http_result_t perform_get(
     maelys_http_client_t *client, const char *authority, const char *target,
     const char *expected_body, char **out_diagnostic) {
@@ -74,24 +150,32 @@ int main(int argc, char **argv) {
     maelys_http_tls_provider_t *tls = NULL;
     maelys_http_transport_t *transport = NULL;
     maelys_http_client_t *client = NULL;
+    maelys_http_client_limits_t limits;
     const char *mode;
     char *error = NULL;
     maelys_http_result_t result;
+    int paced;
     if (argc != 3 && argc != 4) return 64;
     mode = argc == 4 ? argv[3] : "single";
     if (strcmp(mode, "single") && strcmp(mode, "reuse") &&
-        strcmp(mode, "close") && strcmp(mode, "silent-close")) return 64;
+        strcmp(mode, "close") && strcmp(mode, "silent-close") &&
+        strcmp(mode, "paced-post")) return 64;
+    paced = !strcmp(mode, "paced-post");
+    maelys_http_client_limits_default(&limits);
+    if (paced) limits.max_progress_steps_per_advance = 1u;
     files.ca_file = argv[1];
     result = maelys_http_tls_mbedtls_client_create(&files, &tls, &error);
     if (result == MAELYS_HTTP_OK) {
         result = maelys_http_posix_transport_create(tls, &transport, &error);
     }
     if (result == MAELYS_HTTP_OK) result = maelys_http_client_create(
-        transport, NULL, &client);
-    if (result == MAELYS_HTTP_OK && strcmp(mode, "single")) {
+        transport, &limits, &client);
+    if (result == MAELYS_HTTP_OK && strcmp(mode, "single") && !paced) {
         result = maelys_http_client_set_connection_reuse(client, 1);
     }
-    if (result == MAELYS_HTTP_OK) {
+    if (result == MAELYS_HTTP_OK && paced) {
+        result = perform_paced_post(client, argv[2], "/echo", "posted body", &error);
+    } else if (result == MAELYS_HTTP_OK) {
         const char *first_target = "/";
         const char *first_body = "ok";
         if (!strcmp(mode, "reuse")) {
@@ -110,7 +194,7 @@ int main(int argc, char **argv) {
         const struct timespec settle = {0, 100000000L};
         (void)nanosleep(&settle, NULL);
     }
-    if (result == MAELYS_HTTP_COMPLETE && strcmp(mode, "single")) {
+    if (result == MAELYS_HTTP_COMPLETE && strcmp(mode, "single") && !paced) {
         result = perform_get(client, argv[2], "/two", "two", &error);
     }
     if (result != MAELYS_HTTP_COMPLETE) {

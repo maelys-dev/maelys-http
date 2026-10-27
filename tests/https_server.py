@@ -38,6 +38,25 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if self.path in ("/close", "/silent-close"):
             self.close_connection = True
 
+    def do_POST(self):
+        # Echo the body; report how much of the announced length arrived,
+        # so a request cut after its head shows as a short count.
+        length = int(self.headers["Content-Length"])
+        body = self.rfile.read(length)
+        with self.server.observation_lock:
+            if self.server.report_path:
+                with open(self.server.report_path, "a", encoding="ascii") as report:
+                    report.write(f"{self.connection_id} {self.path} {len(body)}/{length}\n")
+                    report.flush()
+        if len(body) != length:
+            self.close_connection = True
+            return
+        self.send_response(200)
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+        self.wfile.flush()
+
     def log_message(self, fmt, *args):
         pass
 

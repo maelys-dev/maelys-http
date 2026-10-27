@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- **A request body is no longer lost to a TLS 1.3 session ticket.** With
+  Mbed TLS 4, a read that answers `WANT_READ` can leave a NewSessionTicket
+  half-handled, and the next `mbedtls_ssl_write` completes it and returns
+  `MBEDTLS_ERR_SSL_RECEIVED_NEW_SESSION_TICKET` without sending anything.
+  The upload probe reads between a request's head and its body, so when the
+  server's tickets arrived just before that read, the body write failed as
+  an I/O failure and the connection closed with the head sent and the body
+  missing. The Mbed TLS provider now writes again after a ticket, as it
+  already read again. The TLS integration test posts a body one progress
+  step at a time, which put the tickets in that window on every run before
+  this fix.
+
 ## 0.1.17 - 2026-10-24
 
 No change to the codec, the client or ABI 1. This release moves Maelys System

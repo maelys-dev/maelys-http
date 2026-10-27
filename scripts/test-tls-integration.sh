@@ -52,11 +52,12 @@ build/tls_integration_client "$root/server.crt" "localhost:$port"
 build/tls_integration_client "$root/server.crt" "localhost:$port" reuse
 build/tls_integration_client "$root/server.crt" "localhost:$port" close
 build/tls_integration_client "$root/server.crt" "localhost:$port" silent-close
+build/tls_integration_client "$root/server.crt" "localhost:$port" paced-post
 
 i=0
 while [ "$i" -lt 100 ]; do
     lines="$(wc -l <"$report" | tr -d ' ')"
-    if [ "$lines" -ge 7 ]; then
+    if [ "$lines" -ge 8 ]; then
         break
     fi
     i=$((i + 1))
@@ -71,7 +72,9 @@ fi
 
 # Line 1 is the conservative single exchange. The reuse pair must share one
 # physical TCP/TLS connection; Connection: close and a silent peer shutdown
-# must each force a fresh connection for their second exchange.
+# must each force a fresh connection for their second exchange. The paced
+# POST must deliver its whole body although the TLS 1.3 session tickets were
+# read between its head and its body.
 if ! awk '
     NR == 2 { reuse = $1; ok = ($2 == "/one") }
     NR == 3 { ok = ok && $1 == reuse && $2 == "/two" }
@@ -79,6 +82,7 @@ if ! awk '
     NR == 5 { ok = ok && $1 != closing && $2 == "/two" }
     NR == 6 { silent = $1; ok = ok && $2 == "/silent-close" }
     NR == 7 { ok = ok && $1 != silent && $2 == "/two" }
+    NR == 8 { ok = ok && $2 == "/echo" && $3 == "11/11" }
     END { exit ok ? 0 : 1 }
 ' "$report"; then
     cat "$report" >&2
@@ -93,4 +97,4 @@ if build/tls_integration_client "$root/other.crt" "localhost:$port"; then
     echo 'unknown authority was accepted' >&2
     exit 1
 fi
-echo 'TLS integration: keep-alive, peer-close, CA, hostname and authority gates passed'
+echo 'TLS integration: keep-alive, peer-close, paced upload, CA, hostname and authority gates passed'
