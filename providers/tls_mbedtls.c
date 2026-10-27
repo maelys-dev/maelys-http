@@ -190,6 +190,18 @@ static maelys_http_io_step_t tls_write(
     if (out_written) *out_written = 0u;
     if (!session || !buffer || !length || !out_written) return MAELYS_HTTP_IO_FAILED;
     result = mbedtls_ssl_write(&session->ssl, buffer, length);
+#ifdef MBEDTLS_ERR_SSL_RECEIVED_NEW_SESSION_TICKET
+    /* A read that answered WANT_READ may have left a ticket half-handled;
+     * the next write then completes it and reports it instead of sending
+     * anything. Write again rather than fail between a head and its body. */
+    {
+        unsigned ticket_count = 0u;
+        while (result == MBEDTLS_ERR_SSL_RECEIVED_NEW_SESSION_TICKET &&
+               ticket_count++ < 8u) {
+            result = mbedtls_ssl_write(&session->ssl, buffer, length);
+        }
+    }
+#endif
     if (result > 0) *out_written = (size_t)result;
     return translate(session, result, 0);
 }
