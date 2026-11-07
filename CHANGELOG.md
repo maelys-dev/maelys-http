@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+### Added
+
+- **A binary archive for macOS arm64**, `maelys-http-VERSION-macos-arm64.tar.gz`,
+  on the model of maelys-system's: `libmaelys_http.a`,
+  `libmaelys_http_client.a` and `libmaelys_http_tls_mbedtls.a`, the headers
+  and the pkg-config files, without any shared library or Mbed TLS, with its
+  own SBOM and provenance. The TLS provider is compiled against Homebrew's
+  Mbed TLS, at the version `dependencies/mbedtls-4.pin` names, since its
+  structure sizes depend on the configuration and Homebrew's is the one a
+  macOS consumer links. Its pkg-config file accepts that minor line only, and
+  `share/maelys-http/build-info` records both dependency versions and the
+  configuration. The source archive and the bottles are unchanged.
+
 ### Dependencies
 
 - **maelys-system moves from v0.14.4 to v0.15.0**, commit

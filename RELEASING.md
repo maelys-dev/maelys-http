@@ -9,16 +9,18 @@ what it runs lives in `scripts/`.
 
 `maelys-release.conf` holds the reasoning as well as the values.
 
-- **Three targets verify, one packages** (`[package] linux-x86_64`). At the
-  tag, linux-x86_64, linux-arm64 and macos-arm64 each replay the source,
-  install and TLS gates. Only linux-x86_64 builds the archive: the release
-  artifact is a source archive, `git archive` writes the same tar everywhere
-  but gzip does not, and three runners compressing one tree into three
-  different archives is a clash the socle refuses.
+- **Three targets verify, two package** (`[package] linux-x86_64
+  macos-arm64`), each under names of its own. At the tag, linux-x86_64,
+  linux-arm64 and macos-arm64 each replay the source, install and TLS gates.
+  linux-x86_64 builds the source archive: `git archive` writes the same tar
+  everywhere but gzip does not, and three runners compressing one tree into
+  three different archives is a clash the socle refuses. macos-arm64 builds
+  the binary archive described below.
 - **`*.tar` and `*.spdx.json`** beyond the socle's `*.tar.gz`. What the
   manifest does not name is attested and never published.
-- **`*.spdx.json` as the SBOM**, attested against the file the document itself
-  names, never against a file paired with it by convention.
+- **`*.spdx.json` as the SBOM**, one document per packaging target, attested
+  against the file the document itself names, never against a file paired
+  with it by convention.
 - **A reviewer gate** on the `release` environment. With one maintainer the
   approver and the tagger are the same person, so it is a pause rather than a
   control — and a pause is what was missing the day a tag was pushed before its
@@ -94,10 +96,12 @@ same question before it signs.
    install-check check-system-pin` and `make tls-integration
    REQUIRE_MBEDTLS=1`, against the Mbed TLS commit `dependencies/mbedtls.pin`
    names on Linux, built by `scripts/build-pinned-mbedtls.sh`, and against
-   Homebrew's on macOS. Only linux-x86_64 then runs
-   `scripts/package-release.sh`, which writes the archives, their digests, the
-   reproducibility check, the SBOM and the build of the extracted archive. No
-   build job holds a write token.
+   Homebrew's on macOS. linux-x86_64 and macos-arm64 then run
+   `scripts/package-release.sh TARGET`. On linux-x86_64 it writes the source
+   archives, their digests, the reproducibility check, the SBOM and the build
+   of the extracted archive. On macos-arm64 it hands over to
+   `scripts/package-macos-archive.sh`, which writes the binary archive, its
+   digest and its SBOM. No build job holds a write token.
 6. The `publish` job waits for the reviewer, downloads what `build` produced,
    re-verifies every digest, writes `SHA256SUMS` and creates the release. It is
    the only job that may write.
@@ -112,6 +116,47 @@ System pin from inside that same archive. The tap renders on macOS while the
 release built on Linux, and gzip is not byte-identical between the two, so a
 formula hashing a locally rebuilt archive would name a digest no downloader
 ever computes. It is also why the tap job needs the release job.
+
+## The macOS binary archive
+
+`maelys-http-VERSION-macos-arm64.tar.gz` is laid out like maelys-system's
+archive: under `usr/local`, the three static archives `libmaelys_http.a`,
+`libmaelys_http_client.a` and `libmaelys_http_tls_mbedtls.a`, the public
+headers, the three pkg-config files and `share/maelys-http/build-info`. It
+carries no shared library, no Mbed TLS and no `libmaelys_sys.a`: maelys-system
+publishes its own archive, and `maelys-http-client.pc` requires the version
+`dependencies/maelys-system.pin` names.
+
+Mbed TLS is the consumer's to link, and that is why the provider is not
+compiled against `dependencies/mbedtls-4.pin` built from source. It embeds Mbed
+TLS structures whose size depends on the configuration as well as the
+version: Homebrew's 4.2.0 turns on `MBEDTLS_THREADING_C`,
+`MBEDTLS_THREADING_PTHREAD` and `MBEDTLS_SSL_DTLS_SRTP`, and its
+`mbedtls_ssl_context` is 848 bytes where the upstream default is 584. A
+provider compiled against the default and linked with Homebrew's would let
+Mbed TLS write past every session it allocates. The archive is therefore
+compiled against Homebrew's Mbed TLS, which a macOS consumer links and the
+bottles use, and the script refuses to package unless that is the version
+`dependencies/mbedtls-4.pin` names. `maelys-http-tls-mbedtls.pc` accepts that
+minor line only (`>= 4.2.0, < 4.3`), since Mbed TLS keeps structure layouts
+across patch releases only, and `build-info` records the version, the three
+options and the structure sizes.
+
+Before it writes the SBOM, the script plays a consumer: it installs
+maelys-system from its pinned checkout, extracts the archive beside it, links
+`tests/tls_integration_client.c` statically from the libraries the pkg-config
+files name, requires `otool -L` to list only `libSystem`, and runs
+`scripts/test-tls-integration.sh` with that client.
+
+The provenance of a published file is verified against the socle's workflow
+and the tag:
+
+```sh
+gh attestation verify maelys-http-X.Y.Z-macos-arm64.tar.gz \
+  --repo maelys-dev/maelys-http \
+  --signer-workflow maelys-dev/maelys-release/.github/workflows/release.yml \
+  --source-ref refs/tags/vX.Y.Z
+```
 
 ## Replaying a failed publication
 
@@ -139,7 +184,8 @@ eval "$(sh scripts/checkout-dependencies.sh "$PWD/../maelys-http-deps")"
 `maelys-release dependencies . --apply` prints the same assignment and, unlike
 the script, refreshes a root that already exists instead of refusing it. From
 there `make check`, `bash scripts/verify-release.sh <target>` and `bash
-scripts/package-release.sh` are exactly what the release runs.
+scripts/package-release.sh <target>` are exactly what the release runs; the
+macos-arm64 archive is packaged on a Mac with Homebrew's Mbed TLS.
 
 Before a tag that changes the release or its packaging, replay the Linux build
 job in a bare container, where nothing the runner image happens to carry can
