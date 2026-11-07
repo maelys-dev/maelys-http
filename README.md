@@ -21,6 +21,22 @@ The package deliberately ships separate static archives:
 - `libmaelys_http_client.a`: generic streaming client and POSIX transport;
 - `libmaelys_http_tls_mbedtls.a`: optional client TLS provider.
 
+## Install
+
+- **Homebrew**: `brew install maelys-dev/tap/libmaelys-http`, with bottles for
+  macOS arm64.
+- **Binary archive for macOS arm64**: each release publishes
+  `maelys-http-VERSION-macos-arm64.tar.gz`, the three static archives, the
+  headers and the pkg-config files under `usr/local`, and no shared library.
+  It is linked with maelys-system's archive of the version
+  `maelys-http-client.pc` requires, and with Homebrew's Mbed TLS: the TLS
+  provider was compiled against that build, of the minor version its
+  pkg-config file accepts, and another configuration would not have the same
+  structure sizes. `usr/local/share/maelys-http/build-info` records both
+  versions. [RELEASING.md](RELEASING.md) says how the archive is checked and
+  how to verify its provenance.
+- **Source**: `maelys-http-VERSION.tar.gz`, built as below.
+
 ## Status
 
 Version 0.1.0 establishes public ABI 1 for the H1 codec and H2 generic client

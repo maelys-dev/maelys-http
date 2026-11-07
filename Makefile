@@ -10,6 +10,15 @@ PREFIX ?= /usr/local
 DESTDIR ?=
 REQUIRE_MBEDTLS ?= 0
 MBEDTLS_PKGCONFIG_MIN_VERSION ?= 3.6.7
+# Empty for a build from source, whose provider is compiled against the Mbed
+# TLS it is then linked with. The macOS binary archive sets it to the next
+# minor version: its provider was compiled against one release's structure
+# layouts, which Mbed TLS keeps only across patch releases.
+MBEDTLS_PKGCONFIG_BELOW ?=
+comma := ,
+MBEDTLS_PKGCONFIG_UPPER := $(if $(MBEDTLS_PKGCONFIG_BELOW),$(comma) mbedtls < \
+	$(MBEDTLS_PKGCONFIG_BELOW)$(comma) mbedx509 < $(MBEDTLS_PKGCONFIG_BELOW)$(comma) \
+	mbedcrypto < $(MBEDTLS_PKGCONFIG_BELOW))
 FUZZ_TARGETS := request response chunked smuggling
 FUZZ_RUNS ?= 10000
 FUZZ_MAX_LEN ?= 65536
@@ -320,6 +329,7 @@ install-mbedtls: check-mbedtls install
 		$(DESTDIR)$(PREFIX)/lib/
 	sed -e 's|@PREFIX@|$(PREFIX)|g' -e 's|@VERSION@|$(VERSION)|g' \
 		-e 's|@MBEDTLS_MIN_VERSION@|$(MBEDTLS_PKGCONFIG_MIN_VERSION)|g' \
+		-e 's|@MBEDTLS_UPPER@|$(MBEDTLS_PKGCONFIG_UPPER)|' \
 		pkgconfig/maelys-http-tls-mbedtls.pc.in > \
 		$(DESTDIR)$(PREFIX)/lib/pkgconfig/maelys-http-tls-mbedtls.pc
 

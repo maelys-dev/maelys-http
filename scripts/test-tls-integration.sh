@@ -1,6 +1,10 @@
 #!/bin/sh
 set -eu
 
+# The client under test: the one tls-integration builds from this tree, or,
+# with MAELYS_HTTP_TLS_CLIENT, one a consumer linked from a packaged archive.
+client="${MAELYS_HTTP_TLS_CLIENT:-build/tls_integration_client}"
+
 root="$(mktemp -d)"
 ready="$root/ready"
 report="$root/report"
@@ -48,11 +52,11 @@ case "$port" in
     ''|*[!0-9]*) echo 'invalid TLS integration port' >&2; exit 1 ;;
 esac
 
-build/tls_integration_client "$root/server.crt" "localhost:$port"
-build/tls_integration_client "$root/server.crt" "localhost:$port" reuse
-build/tls_integration_client "$root/server.crt" "localhost:$port" close
-build/tls_integration_client "$root/server.crt" "localhost:$port" silent-close
-build/tls_integration_client "$root/server.crt" "localhost:$port" paced-post
+"$client" "$root/server.crt" "localhost:$port"
+"$client" "$root/server.crt" "localhost:$port" reuse
+"$client" "$root/server.crt" "localhost:$port" close
+"$client" "$root/server.crt" "localhost:$port" silent-close
+"$client" "$root/server.crt" "localhost:$port" paced-post
 
 i=0
 while [ "$i" -lt 100 ]; do
@@ -89,11 +93,11 @@ if ! awk '
     echo 'TLS keep-alive connection identity invariant failed' >&2
     exit 1
 fi
-if build/tls_integration_client "$root/server.crt" "127.0.0.1:$port"; then
+if "$client" "$root/server.crt" "127.0.0.1:$port"; then
     echo 'hostname mismatch was accepted' >&2
     exit 1
 fi
-if build/tls_integration_client "$root/other.crt" "localhost:$port"; then
+if "$client" "$root/other.crt" "localhost:$port"; then
     echo 'unknown authority was accepted' >&2
     exit 1
 fi

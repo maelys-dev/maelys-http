@@ -4,12 +4,14 @@
 #
 # usage: scripts/package-release.sh [TARGET]
 #
-# What this product ships is a source archive, and source has no target: the
-# bytes below are the same whichever runner produces them, which is why
-# maelys-release.conf declares a single packaging target. TARGET is accepted
-# because the socle substitutes it, and is checked rather than used.
+# Two targets package, under names of their own. macos-arm64 hands over to
+# scripts/package-macos-archive.sh, which writes the binary archive. Every
+# other target, and a call without one, writes the source archive below:
+# source has no target, and maelys-release.conf has it packaged once, on
+# linux-x86_64, since gzip does not compress one tree to the same bytes on
+# every machine.
 #
-# dist/ receives, in this order:
+# For the source archive, dist/ receives, in this order:
 #   maelys-http-VERSION.tar        the canonical archive git writes
 #   maelys-http-VERSION.tar.gz     the same tree compressed
 #   both .sha256 files and SHA256SUMS
@@ -27,6 +29,9 @@ case "$target" in
     ''|linux-x86_64|linux-arm64|macos-arm64) ;;
     *) echo "package-release: unknown target: $target" >&2; exit 64 ;;
 esac
+if test "$target" = macos-arm64; then
+    exec ./scripts/package-macos-archive.sh
+fi
 
 version=$(sed -n '1p' VERSION)
 case "$version" in

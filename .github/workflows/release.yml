@@ -32,7 +32,7 @@ jobs:
       verify_command: bash scripts/verify-release.sh TARGET
       linux_packages: build-essential dpkg-dev file rpm pkg-config cmake python3 openssl
       macos_packages: pkg-config mbedtls
-      targets: '[{"target": "linux-x86_64"}, {"target": "linux-arm64", "package": false}, {"target": "macos-arm64", "package": false}]'
+      targets: '[{"target": "linux-x86_64"}, {"target": "linux-arm64", "package": false}, {"target": "macos-arm64"}]'
       manifest_patterns: '*.tar.gz *.deb *.rpm *.tar *.spdx.json'
       sbom_pattern: '*.spdx.json'
       commit_verification: signed-on-default-branch

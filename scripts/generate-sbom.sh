@@ -1,8 +1,15 @@
 #!/bin/sh
+# usage: scripts/generate-sbom.sh VERSION SYSTEM_VERSION [TARGET MBEDTLS_VERSION]
+#
+# Without TARGET the document describes the source archive. With macos-arm64
+# it describes the binary archive of that target, whose TLS provider was
+# compiled against MBEDTLS_VERSION: Mbed TLS is still not in the archive,
+# and the document says which one the consumer has to link.
 set -eu
 
 version="${1:?version required}"
 system_version="${2:?maelys-system version required}"
+target="${3:-}"
 case "$version" in
     *[!0-9A-Za-z.-]*|'') echo 'invalid version' >&2; exit 1 ;;
 esac
@@ -10,9 +17,25 @@ case "$system_version" in
     *[!0-9A-Za-z.-]*|'') echo 'invalid maelys-system version' >&2; exit 1 ;;
 esac
 
-archive="dist/maelys-http-$version.tar.gz"
+case "$target" in
+    '')
+        name="maelys-http-$version"
+        mbedtls_version=NOASSERTION
+        mbedtls_comment='Optional, resolved by the consumer. The build and the client constructor refuse anything below 3.6.7 in the 3.x line or 4.1.2 in the 4.x line.'
+        ;;
+    macos-arm64)
+        name="maelys-http-$version-$target"
+        mbedtls_version="${4:?Mbed TLS version required}"
+        case "$mbedtls_version" in
+            *[!0-9.]*|'') echo 'invalid Mbed TLS version' >&2; exit 1 ;;
+        esac
+        mbedtls_comment="Not in the archive, linked by the consumer. libmaelys_http_tls_mbedtls.a was compiled against Homebrew's Mbed TLS $mbedtls_version, the version dependencies/mbedtls-4.pin names, and its configuration; share/maelys-http/build-info records both."
+        ;;
+    *) echo "unknown target: $target" >&2; exit 1 ;;
+esac
+archive="dist/$name.tar.gz"
 checksum_file="$archive.sha256"
-sbom="dist/maelys-http-$version.spdx.json"
+sbom="dist/$name.spdx.json"
 test -f "$archive"
 test -f "$checksum_file"
 
@@ -38,8 +61,8 @@ cat >"$sbom" <<EOF
   "spdxVersion": "SPDX-2.3",
   "dataLicense": "CC0-1.0",
   "SPDXID": "SPDXRef-DOCUMENT",
-  "name": "maelys-http-$version",
-  "documentNamespace": "https://github.com/maelys-dev/maelys-http/releases/tag/v$version/spdx/$commit",
+  "name": "$name",
+  "documentNamespace": "https://github.com/maelys-dev/maelys-http/releases/tag/v$version/spdx/$commit${target:+/$target}",
   "creationInfo": {
     "created": "$created",
     "creators": ["Tool: maelys-http/scripts/generate-sbom.sh"]
@@ -49,8 +72,8 @@ cat >"$sbom" <<EOF
       "name": "maelys-http",
       "SPDXID": "SPDXRef-Package-maelys-http",
       "versionInfo": "$version",
-      "packageFileName": "maelys-http-$version.tar.gz",
-      "downloadLocation": "https://github.com/maelys-dev/maelys-http/releases/download/v$version/maelys-http-$version.tar.gz",
+      "packageFileName": "$name.tar.gz",
+      "downloadLocation": "https://github.com/maelys-dev/maelys-http/releases/download/v$version/$name.tar.gz",
       "filesAnalyzed": false,
       "checksums": [{"algorithm": "SHA256", "checksumValue": "$archive_sha256"}],
       "licenseConcluded": "MPL-2.0",
@@ -77,8 +100,8 @@ cat >"$sbom" <<EOF
     {
       "name": "Mbed TLS",
       "SPDXID": "SPDXRef-Package-mbedtls",
-      "versionInfo": "NOASSERTION",
-      "comment": "Optional, resolved by the consumer. The build and the client constructor refuse anything below 3.6.7 in the 3.x line or 4.1.2 in the 4.x line.",
+      "versionInfo": "$mbedtls_version",
+      "comment": "$mbedtls_comment",
       "downloadLocation": "https://github.com/Mbed-TLS/mbedtls",
       "filesAnalyzed": false,
       "licenseConcluded": "NOASSERTION",
