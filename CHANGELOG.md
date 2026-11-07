@@ -1,6 +1,9 @@
 # Changelog
 
-## Unreleased
+## 0.1.19 - 2026-11-07
+
+A binary archive for macOS arm64, and Maelys System 0.15.0. No change to the
+API or ABI 1.
 
 ### Added
 
@@ -23,6 +26,8 @@
   which this library does not start; no function it calls moves. The pin
   follows the tap, which serves `libmaelys-sys` at v0.15.0 and is what the
   formula builds against.
+- Adopted socle v0.66.0, from v0.65.1. Nothing in it asks a gesture of this
+  repository: it describes each workflow's job graph in declarations.
 
 ## 0.1.18 - 2026-10-27
 
