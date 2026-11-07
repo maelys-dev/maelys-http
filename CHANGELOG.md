@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+### Dependencies
+
+- **maelys-system moves from v0.14.4 to v0.15.0**, commit
+  `27e76d964502ba25a5de1b0ac4e0da0e6a7e9580`, still ABI 1. 0.15.0 adds
+  `maelys_sys_owned_last_refusal`, a diagnostic of owned process groups,
+  which this library does not start; no function it calls moves. The pin
+  follows the tap, which serves `libmaelys-sys` at v0.15.0 and is what the
+  formula builds against.
+
 ## 0.1.18 - 2026-10-27
 
 One fix, in the Mbed TLS provider: with Mbed TLS 4, a request could lose its
