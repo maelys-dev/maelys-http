@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- **The Mbed TLS floor of the 4.1 line is 4.1.1, not 4.1.2.** No 4.1.2 was
+  ever published: 4.1.1, released on 2026-07-07 with 3.6.7 and 4.2.0, carries
+  the same nine security advisories and is the patched release of the 4.1 LTS
+  line. The build and the client constructor refused it, so on 4.x only 4.2.0
+  passed. They now accept 4.1.1 and still refuse 4.1.0. The 4.2 line is named
+  with its own floor, 4.2.0, its first release; what it accepts does not
+  change. The distribution-backport exception now reaches 4.1.0, the release
+  4.1.1 patches, as it reaches 3.6.6 on the 3.6 line.
+
 ## 0.1.19 - 2026-11-08
 
 A binary archive for macOS arm64, and Maelys System 0.15.0. No change to the

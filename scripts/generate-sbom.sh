@@ -21,7 +21,7 @@ case "$target" in
     '')
         name="maelys-http-$version"
         mbedtls_version=NOASSERTION
-        mbedtls_comment='Optional, resolved by the consumer. The build and the client constructor refuse anything below 3.6.7 in the 3.x line or 4.1.2 in the 4.x line.'
+        mbedtls_comment='Optional, resolved by the consumer. The build and the client constructor refuse anything below 3.6.7 on the 3.6 line, 4.1.1 on the 4.1 line or 4.2.0 on the 4.2 line.'
         ;;
     macos-arm64)
         name="maelys-http-$version-$target"

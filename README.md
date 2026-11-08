@@ -63,8 +63,10 @@ make check
 make sanitizers
 ```
 
-The Mbed TLS module is optional. Its security floor is Mbed TLS 3.6.7 or
-4.1.2 within the maintained major lines:
+The Mbed TLS module is optional. Its security floor is, for each maintained
+line, the release that carries the fixes of the July 2026 security advisories:
+3.6.7 on the 3.6 LTS line, 4.1.1 on the 4.1 LTS line, and 4.2.0 on the 4.2
+line:
 
 ```sh
 make check-mbedtls
