@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.19 - 2026-11-07
+## 0.1.19 - 2026-11-08
 
 A binary archive for macOS arm64, and Maelys System 0.15.0. No change to the
 API or ABI 1.
