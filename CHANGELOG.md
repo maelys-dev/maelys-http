@@ -1,6 +1,10 @@
 # Changelog
 
-## Unreleased
+## 0.1.20 - 2026-11-08
+
+Mbed TLS 4.1.1, the patched release of the 4.1 LTS line, is accepted. No
+change to the API or ABI 1, nor to any pin: maelys-system v0.15.0, Mbed TLS
+v3.6.7 and v4.2.0.
 
 ### Fixed
 
